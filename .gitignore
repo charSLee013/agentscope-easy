@@ -144,3 +144,9 @@ todo.md
 /.codex/
 /.specify/
 /.claude/
+
+# Sphinx build artifacts
+docs/tutorial/**/doctrees/
+docs/tutorial/**/.doctrees/
+*.buildinfo
+*.pickle
