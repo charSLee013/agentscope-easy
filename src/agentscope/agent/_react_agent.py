@@ -359,6 +359,9 @@ class ReActAgent(ReActAgentBase):
         # Retrieve relevant documents from the knowledge base(s) if any
         await self._retrieve_from_knowledge(msg)
 
+        # Control if LLM generates tool calls in each reasoning step
+        tool_choice: Literal["auto", "none", "any", "required"] | None = None
+
         self._required_structured_model = structured_model
         # Record structured output model if provided
         if structured_model:
@@ -366,11 +369,12 @@ class ReActAgent(ReActAgentBase):
                 self.finish_function_name,
                 structured_model,
             )
+            tool_choice = "required"
 
         # The reasoning-acting loop
         reply_msg = None
         for _ in range(self.max_iters):
-            msg_reasoning = await self._reasoning()
+            msg_reasoning = await self._reasoning(tool_choice)
 
             futures = [
                 self._acting(tool_call)
@@ -413,6 +417,7 @@ class ReActAgent(ReActAgentBase):
 
     async def _reasoning(
         self,
+        tool_choice: Literal["auto", "none", "any", "required"] | None = None,
     ) -> Msg:
         """Perform the reasoning process."""
         if self.plan_notebook:
@@ -437,6 +442,7 @@ class ReActAgent(ReActAgentBase):
         res = await self.model(
             prompt,
             tools=self.toolkit.get_json_schemas(),
+            tool_choice=tool_choice,
         )
 
         # handle output from the model
