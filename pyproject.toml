@@ -54,6 +54,7 @@ full = [
     # Long-term memory
     "mem0ai<=0.1.116",
     "packaging",
+    "reme-ai>=0.2.0.3",
     # RAG
     "pypdf",
     "nltk",
