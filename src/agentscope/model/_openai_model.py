@@ -73,7 +73,7 @@ class OpenAIChatModel(ChatModelBase):
         stream: bool = True,
         reasoning_effort: Literal["low", "medium", "high"] | None = None,
         organization: str = None,
-        client_kwargs: dict = None,
+        client_kwargs: dict[str, JSONSerializableObject] | None = None,
         generate_kwargs: dict[str, JSONSerializableObject] | None = None,
     ) -> None:
         """Initialize the openai client.
@@ -95,7 +95,8 @@ class OpenAIChatModel(ChatModelBase):
             organization (`str`, default `None`):
                 The organization ID for OpenAI API. If not specified, it will
                 be read from the environment variable `OPENAI_ORGANIZATION`.
-            client_kwargs (`dict`, default `None`):
+            client_kwargs (`dict[str, JSONSerializableObject] | None`, \
+             optional):
                 The extra keyword arguments to initialize the OpenAI client.
             generate_kwargs (`dict[str, JSONSerializableObject] | None`, \
              optional):
