@@ -218,6 +218,11 @@ class OpenAIChatFormatter(TruncatedFormatterBase):
                     )
 
                 elif typ == "audio":
+                    # Filter out audio content when the multimodal model
+                    # outputs both text and audio, to prevent errors in
+                    # subsequent model calls
+                    if msg.role == "assistant":
+                        continue
                     input_audio = _to_openai_audio_data(block["source"])
                     content_blocks.append(
                         {
@@ -350,6 +355,11 @@ class OpenAIMultiAgentFormatter(TruncatedFormatterBase):
                         },
                     )
                 elif block["type"] == "audio":
+                    # Filter out audio content when the multimodal model
+                    # outputs both text and audio, to prevent errors in
+                    # subsequent model calls
+                    if msg.role == "assistant":
+                        continue
                     input_audio = _to_openai_audio_data(block["source"])
                     audios.append(
                         {
