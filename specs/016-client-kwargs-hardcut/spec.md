@@ -1,9 +1,9 @@
 # Feature Specification: Hard-cut chat model client kwargs naming
 
-**Feature Branch**: `016-client-kwargs-hardcut`  
-**Base Branch**: `easy`  
-**Created**: 2026-02-19  
-**Status**: Draft  
+**Feature Branch**: `016-client-kwargs-hardcut`
+**Base Branch**: `easy`
+**Created**: 2026-02-19
+**Status**: Draft
 **Input**: User-approved plan to absorb upstream model kwargs unification with hard cut
 
 ## User Scenarios & Testing *(mandatory)*

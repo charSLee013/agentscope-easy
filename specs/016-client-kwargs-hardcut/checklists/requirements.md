@@ -1,7 +1,7 @@
 # Specification Quality Checklist: 016-client-kwargs-hardcut
 
-**Purpose**: Validate spec completeness before/after implementation  
-**Created**: 2026-02-19  
+**Purpose**: Validate spec completeness before/after implementation
+**Created**: 2026-02-19
 **Feature**: `specs/016-client-kwargs-hardcut/spec.md`
 
 ## Content Quality
