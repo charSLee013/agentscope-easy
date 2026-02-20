@@ -24,3 +24,9 @@
 - `./.venv/bin/python -m pylint -E src` passed.
 - Focused runtime checks passed: `./.venv/bin/python -m unittest tests.pipeline_test -v` => 15 passed.
 - Selected absorbed commits in this batch: `9f7c410`, `b56c4dd`, `c635281`, `340510f`, `5c3a770`.
+- Windows CI stabilization hotfix was added in this branch: `tests/evaluation_test.py` now skips Ray evaluator on Windows and avoids `ray.init` in setup on Windows runners.
+- Hotfix verification commands:
+  - `pre-commit run --all-files` (clean)
+  - `./.venv/bin/python -m ruff check tests/evaluation_test.py` (pass)
+  - `./.venv/bin/python -m pylint -E tests/evaluation_test.py` (pass)
+  - `./.venv/bin/python -m unittest tests.evaluation_test -v` (2 passed)

@@ -28,3 +28,5 @@
 
 - [x] T014 Update checklist evidence
 - [x] T015 Prepare branch for PR (clean working tree except expected commits)
+- [x] T016 Apply Windows CI stabilization hotfix in `tests/evaluation_test.py` (skip Ray evaluator on Windows and bypass `ray.init` during setup)
+- [x] T017 Re-run local validation for hotfix (`pre-commit`, targeted `ruff`/`pylint`, evaluator test module)
