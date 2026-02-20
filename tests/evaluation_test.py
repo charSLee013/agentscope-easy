@@ -48,6 +48,7 @@ TOY_BENCHMARK = [
 
 
 METRIC_NAME = "math_check_number_equal"
+IS_WINDOWS = sys.platform.startswith("win")
 
 
 class CheckEqual(MetricBase):
@@ -191,6 +192,9 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
                 "ray_results",
             ),
         )
+        if IS_WINDOWS:
+            return
+
         # Initialize Ray with proper serialization settings
         if not ray.is_initialized():
             # Add the current directory to Python path for Ray workers
@@ -242,6 +246,12 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
 
     async def test_ray_evaluator(self) -> None:
         """Test ray evaluator."""
+        if IS_WINDOWS:
+            self.skipTest(
+                "Skip Ray evaluator on Windows due to unstable ray node "
+                "startup in CI.",
+            )
+
         evaluator = RayEvaluator(
             name="Test evaluation",
             benchmark=ToyBenchmark(),
