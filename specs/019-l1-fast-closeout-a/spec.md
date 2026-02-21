@@ -1,9 +1,9 @@
 # Feature Specification: L1 fast closeout A absorption check
 
-**Feature Branch**: `019-l1-fast-closeout-a`  
-**Base Branch**: `easy`  
-**Created**: 2026-02-21  
-**Status**: Draft  
+**Feature Branch**: `019-l1-fast-closeout-a`
+**Base Branch**: `easy`
+**Created**: 2026-02-21
+**Status**: Draft
 **Input**: User description: "1. 019-l1-fast-closeout-a（推荐）"
 
 ## User Scenarios & Testing

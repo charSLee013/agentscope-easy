@@ -1,7 +1,7 @@
 # Implementation Plan: L1 fast closeout A
 
-**Branch**: `019-l1-fast-closeout-a`  
-**Date**: 2026-02-21  
+**Branch**: `019-l1-fast-closeout-a`
+**Date**: 2026-02-21
 **Spec**: `specs/019-l1-fast-closeout-a/spec.md`
 
 ## Summary
