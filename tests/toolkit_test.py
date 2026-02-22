@@ -850,90 +850,82 @@ class ToolkitTest(IsolatedAsyncioTestCase):
 
     async def test_meta_tool(self) -> None:
         """Test the meta tool."""
+
+        def tool_function_1() -> ToolResponse:
+            """Test tool function 1."""
+            return ToolResponse(
+                content=[
+                    TextBlock(
+                        type="text",
+                        text="1",
+                    ),
+                ],
+            )
+
+        def tool_function_2() -> ToolResponse:
+            """Test tool function 2."""
+            return ToolResponse(
+                content=[
+                    TextBlock(
+                        type="text",
+                        text="2",
+                    ),
+                ],
+            )
+
         self.toolkit.register_tool_function(
             self.toolkit.reset_equipped_tools,
         )
-        self.assertListEqual(
-            self.toolkit.get_json_schemas(),
-            [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "reset_equipped_tools",
-                        "parameters": {
-                            "properties": {},
-                            "type": "object",
-                        },
-                        "description": (
-                            "Choose appropriate tools to equip yourself "
-                            "with, so that you can\n\n"
-                            "finish your task. Each argument in this function "
-                            "represents a group\n"
-                            "of related tools, and the value indicates "
-                            "whether to activate the\n"
-                            "group or not. Besides, the tool response of "
-                            "this function will\n"
-                            "contain the precaution notes for using them, "
-                            "which you\n"
-                            "**MUST pay attention to and follow**. You can "
-                            "also reuse this function\n"
-                            "to check the notes of the tool groups.\n\n"
-                            "Note this function will `reset` the tools, so "
-                            "that the original tools\n"
-                            "will be removed first."
-                        ),
-                    },
-                },
-            ],
+
+        # The meta tool should be registered and expose no group args yet.
+        meta_tool_schema = self.toolkit.get_json_schemas()[0]
+        self.assertEqual(
+            meta_tool_schema["function"]["name"],
+            "reset_equipped_tools",
         )
+        self.assertEqual(
+            meta_tool_schema["function"]["parameters"]["properties"],
+            {},
+        )
+        self.assertIn(
+            "absolute final state of ALL tool",
+            meta_tool_schema["function"]["description"],
+        )
+
         self.toolkit.create_tool_group(
             "browser_use",
             "The browser-use related tools.",
-            notes="""## About Browser-Use Tools
-1. You must xxx
+            notes="""1. You must xxx
 2. First click xxx
 """,
         )
-        self.assertListEqual(
-            self.toolkit.get_json_schemas(),
-            [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "reset_equipped_tools",
-                        "parameters": {
-                            "properties": {
-                                "browser_use": {
-                                    "default": False,
-                                    "description": "The browser-use related "
-                                    "tools.",
-                                    "type": "boolean",
-                                },
-                            },
-                            "type": "object",
-                        },
-                        "description": (
-                            "Choose appropriate tools to equip yourself "
-                            "with, so that you can\n\n"
-                            "finish your task. Each argument in this function "
-                            "represents a group\n"
-                            "of related tools, and the value indicates "
-                            "whether to activate the\n"
-                            "group or not. Besides, the tool response of "
-                            "this function will\n"
-                            "contain the precaution notes for using them, "
-                            "which you\n"
-                            "**MUST pay attention to and follow**. You can "
-                            "also reuse this function\n"
-                            "to check the notes of the tool groups.\n\n"
-                            "Note this function will `reset` the tools, so "
-                            "that the original tools\n"
-                            "will be removed first."
-                        ),
-                    },
-                },
-            ],
+        self.toolkit.register_tool_function(
+            tool_function_1,
+            group_name="browser_use",
         )
+        self.toolkit.create_tool_group(
+            "file_use",
+            "The file-use related tools.",
+            notes="""1. You must yyy
+2. First read yyy
+""",
+        )
+        self.toolkit.register_tool_function(
+            tool_function_2,
+            group_name="file_use",
+        )
+
+        meta_tool_schema = self.toolkit.get_json_schemas()[0]
+        self.assertIn(
+            "browser_use",
+            meta_tool_schema["function"]["parameters"]["properties"],
+        )
+        self.assertIn(
+            "file_use",
+            meta_tool_schema["function"]["parameters"]["properties"],
+        )
+
+        # Activate browser_use only.
         res = await self.toolkit.call_tool_function(
             ToolUseBlock(
                 type="tool_use",
@@ -942,18 +934,98 @@ class ToolkitTest(IsolatedAsyncioTestCase):
                 input={"browser_use": True},
             ),
         )
+        async for chunk in res:
+            text = chunk.content[0]["text"]
+            self.assertIn("Now tool groups 'browser_use' are activated.", text)
+            self.assertIn("## About Tool Group 'browser_use'", text)
 
+        # file_use should now be inactive.
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="124",
+                name="tool_function_2",
+                input={},
+            ),
+        )
+        async for chunk in res:
+            self.assertIn("FunctionInactiveError", chunk.content[0]["text"])
+
+        # Activate file_use only, browser_use should be deactivated.
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="125",
+                name="reset_equipped_tools",
+                input={"file_use": True},
+            ),
+        )
+        async for chunk in res:
+            text = chunk.content[0]["text"]
+            self.assertIn("Now tool groups 'file_use' are activated.", text)
+            self.assertIn("## About Tool Group 'file_use'", text)
+
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="126",
+                name="tool_function_1",
+                input={},
+            ),
+        )
+        async for chunk in res:
+            self.assertIn("FunctionInactiveError", chunk.content[0]["text"])
+
+        # Activate both groups.
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="127",
+                name="reset_equipped_tools",
+                input={"browser_use": True, "file_use": True},
+            ),
+        )
+        async for chunk in res:
+            text = chunk.content[0]["text"]
+            self.assertIn("'browser_use'", text)
+            self.assertIn("'file_use'", text)
+
+        # Deactivate all groups.
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="128",
+                name="reset_equipped_tools",
+                input={},
+            ),
+        )
         async for chunk in res:
             self.assertEqual(
+                "All tool groups are now deactivated currently.",
                 chunk.content[0]["text"],
-                "Active tool groups successfully: ['browser_use']. "
-                "You MUST follow these notes to use the tools:\n"
-                "<notes>## About browser_use Tools\n"
-                "## About Browser-Use Tools\n"
-                "1. You must xxx\n"
-                "2. First click xxx\n"
-                "</notes>",
             )
+
+        # Both tools should be inactive now.
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="129",
+                name="tool_function_1",
+                input={},
+            ),
+        )
+        async for chunk in res:
+            self.assertIn("FunctionInactiveError", chunk.content[0]["text"])
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="130",
+                name="tool_function_2",
+                input={},
+            ),
+        )
+        async for chunk in res:
+            self.assertIn("FunctionInactiveError", chunk.content[0]["text"])
 
     async def asyncTearDown(self) -> None:
         """Clean up after each test."""
