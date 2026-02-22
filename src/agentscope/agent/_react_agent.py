@@ -205,7 +205,7 @@ class ReActAgent(ReActAgentBase):
                 long_term_memory.retrieve_from_memory,
             )
         # Add a meta tool function to allow agent-controlled tool management
-        if enable_meta_tool or plan_notebook:
+        if enable_meta_tool:
             self.toolkit.register_tool_function(
                 self.toolkit.reset_equipped_tools,
             )
@@ -226,15 +226,24 @@ class ReActAgent(ReActAgentBase):
         self.plan_notebook = None
         if plan_notebook:
             self.plan_notebook = plan_notebook
-            self.toolkit.create_tool_group(
-                "plan_related",
-                description=self.plan_notebook.description,
-            )
-            for tool in plan_notebook.list_tools():
-                self.toolkit.register_tool_function(
-                    tool,
-                    group_name="plan_related",
+            # When enable_meta_tool is True, plan tools are in plan_related
+            # group and active by agent.
+            # Otherwise, plan tools in basic group and always active.
+            if enable_meta_tool:
+                self.toolkit.create_tool_group(
+                    "plan_related",
+                    description=self.plan_notebook.description,
                 )
+                for tool in plan_notebook.list_tools():
+                    self.toolkit.register_tool_function(
+                        tool,
+                        group_name="plan_related",
+                    )
+            else:
+                for tool in plan_notebook.list_tools():
+                    self.toolkit.register_tool_function(
+                        tool,
+                    )
 
         # If print the reasoning hint messages
         self.print_hint_msg = print_hint_msg
@@ -350,6 +359,9 @@ class ReActAgent(ReActAgentBase):
         # Retrieve relevant documents from the knowledge base(s) if any
         await self._retrieve_from_knowledge(msg)
 
+        # Control if LLM generates tool calls in each reasoning step
+        tool_choice: Literal["auto", "none", "required"] | None = None
+
         self._required_structured_model = structured_model
         # Record structured output model if provided
         if structured_model:
@@ -357,11 +369,12 @@ class ReActAgent(ReActAgentBase):
                 self.finish_function_name,
                 structured_model,
             )
+            tool_choice = "required"
 
         # The reasoning-acting loop
         reply_msg = None
         for _ in range(self.max_iters):
-            msg_reasoning = await self._reasoning()
+            msg_reasoning = await self._reasoning(tool_choice)
 
             futures = [
                 self._acting(tool_call)
@@ -404,6 +417,7 @@ class ReActAgent(ReActAgentBase):
 
     async def _reasoning(
         self,
+        tool_choice: Literal["auto", "none", "required"] | None = None,
     ) -> Msg:
         """Perform the reasoning process."""
         if self.plan_notebook:
@@ -428,6 +442,7 @@ class ReActAgent(ReActAgentBase):
         res = await self.model(
             prompt,
             tools=self.toolkit.get_json_schemas(),
+            tool_choice=tool_choice,
         )
 
         # handle output from the model
@@ -542,6 +557,11 @@ class ReActAgent(ReActAgentBase):
                 ):
                     await self.print(tool_res_msg, chunk.is_last)
 
+                # Raise the CancelledError to handle the interruption in the
+                # handle_interrupt function
+                if chunk.is_interrupted:
+                    raise asyncio.CancelledError()
+
                 # Return message if generate_response is called successfully
                 if (
                     tool_call["name"] == self.finish_function_name
@@ -625,7 +645,10 @@ class ReActAgent(ReActAgentBase):
             "I noticed that you have interrupted me. What can I "
             "do for you?",
             "assistant",
-            metadata={},
+            metadata={
+                # Expose this field to indicate the interruption
+                "is_interrupted": True,
+            },
         )
 
         await self.print(response_msg, True)
