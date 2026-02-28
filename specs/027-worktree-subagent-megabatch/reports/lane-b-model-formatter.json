@@ -1,0 +1,83 @@
+{
+  "worktree": "/Users/charslee/Repo/private/wt-027/lane-b",
+  "branch": "027-lane-b-model-formatter",
+  "lane": "lane-b-model-formatter",
+  "head_after_cherry_picks": "3e19219",
+  "cherry_picks": [
+    {
+      "source": "6bc219a",
+      "status": "skipped_empty",
+      "action": "git cherry-pick --skip",
+      "new_commit": null
+    },
+    {
+      "source": "141b2c4",
+      "status": "applied",
+      "new_commit": "8d58688"
+    },
+    {
+      "source": "19668c1",
+      "status": "applied_with_conflicts",
+      "new_commit": "a0a69cd",
+      "conflicts": [
+        "README.md",
+        "README_zh.md"
+      ],
+      "resolution": "kept ours for docs/TOC conflict"
+    },
+    {
+      "source": "3b67178",
+      "status": "skipped_empty",
+      "action": "git cherry-pick --skip",
+      "new_commit": null
+    },
+    {
+      "source": "bb797fd",
+      "status": "applied",
+      "new_commit": "f516607"
+    },
+    {
+      "source": "9a952b7",
+      "status": "applied",
+      "new_commit": "89fbb12"
+    },
+    {
+      "source": "f5fdc37",
+      "status": "applied_with_conflicts",
+      "new_commit": "bca577f",
+      "conflicts": [
+        "src/agentscope/_version.py"
+      ],
+      "resolution": "kept ours to preserve version 1.0.10"
+    },
+    {
+      "source": "ef91d8d",
+      "status": "applied",
+      "new_commit": "3e19219"
+    }
+  ],
+  "validation": {
+    "pre_commit": {
+      "command": "pre-commit run --all-files",
+      "result": "passed",
+      "notes": "no file modifications"
+    },
+    "ruff": {
+      "command": "./.venv/bin/python -m ruff check src tests || python -m ruff check src tests",
+      "result": "passed",
+      "notes": [
+        "./.venv/bin/python missing",
+        "fallback python command passed"
+      ]
+    },
+    "pytest": {
+      "command": "./.venv/bin/python -m pytest tests/model_openai_test.py tests/model_gemini_test.py tests/formatter_openai_test.py tests/formatter_gemini_test.py -q || python -m pytest tests/model_openai_test.py tests/model_gemini_test.py tests/formatter_openai_test.py tests/formatter_gemini_test.py -q",
+      "result": "failed",
+      "exit_code": 139,
+      "notes": [
+        "./.venv/bin/python missing",
+        "fallback python pytest exits 139 (segfault) with no captured test output"
+      ]
+    }
+  }
+}
