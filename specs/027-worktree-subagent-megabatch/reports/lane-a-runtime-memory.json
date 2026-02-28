@@ -1,0 +1,110 @@
+{
+  "lane": "lane-a",
+  "branch": "027-lane-a-runtime-memory",
+  "generated_at_utc": "2026-02-28T13:42:56Z",
+  "head_before_report_commit": "9559097",
+  "status": "fail",
+  "status_reason": "Required pytest invocation segfaults in current environment (exit 139); workaround run passed.",
+  "commits": [
+    {
+      "source_sha": "b9851f6",
+      "result": "picked",
+      "new_sha": "44b4042",
+      "conflicts": [
+        "src/agentscope/agent/_agent_base.py"
+      ],
+      "resolution": "Kept queue payload shape used in lane and applied asyncio.sleep(0)."
+    },
+    {
+      "source_sha": "9e8558b",
+      "result": "picked",
+      "new_sha": "acda812",
+      "conflicts": [
+        "src/agentscope/agent/_react_agent.py"
+      ],
+      "resolution": "Removed duplicated input replay into long-term memory while preserving lane reply handling."
+    },
+    {
+      "source_sha": "5baeafd",
+      "result": "skipped_empty",
+      "new_sha": null,
+      "conflicts": [
+        "src/agentscope/agent/_react_agent.py",
+        "src/agentscope/memory/_working_memory/_in_memory_memory.py",
+        "tests/memory_compression_test.py",
+        "tests/memory_test.py",
+        "tests/plan_test.py"
+      ],
+      "resolution": "Kept easy-only deletions and current APIs; patch became empty after resolution."
+    },
+    {
+      "source_sha": "ba6a627",
+      "result": "skipped_empty",
+      "new_sha": null,
+      "conflicts": [
+        "src/agentscope/memory/_working_memory/_redis_memory.py"
+      ],
+      "resolution": "Retained deleted file state in easy-only lane; patch became empty."
+    },
+    {
+      "source_sha": "b1e7582",
+      "result": "picked",
+      "new_sha": "9559097",
+      "conflicts": [],
+      "resolution": "Applied cleanly."
+    },
+    {
+      "source_sha": "dd05db2",
+      "result": "skipped_empty",
+      "new_sha": null,
+      "conflicts": [
+        "src/agentscope/agent/_react_agent.py"
+      ],
+      "resolution": "Kept lane control flow to preserve easy-only behavior; patch became empty."
+    },
+    {
+      "source_sha": "df96805",
+      "result": "skipped_empty",
+      "new_sha": null,
+      "conflicts": [
+        "src/agentscope/agent/_react_agent.py"
+      ],
+      "resolution": "Auto-merge yielded no net change."
+    },
+    {
+      "source_sha": "d3c0c1d",
+      "result": "skipped_empty",
+      "new_sha": null,
+      "conflicts": [
+        "src/agentscope/agent/_react_agent.py"
+      ],
+      "resolution": "Auto-merge yielded no net change."
+    }
+  ],
+  "validation": [
+    {
+      "command": "pre-commit run --all-files",
+      "result": "pass",
+      "details": "All hooks passed; no file modifications."
+    },
+    {
+      "command": "./.venv/bin/python -m ruff check src tests || python -m ruff check src tests",
+      "result": "pass_with_fallback",
+      "details": "./.venv/bin/python missing; fallback python ruff check passed."
+    },
+    {
+      "command": "./.venv/bin/python -m pytest tests/react_agent_test.py tests/plan_test.py tests/session_test.py -q || python -m pytest tests/react_agent_test.py tests/plan_test.py tests/session_test.py -q",
+      "result": "fail",
+      "details": "./.venv/bin/python missing; fallback python -m pytest crashed with segfault (exit 139)."
+    },
+    {
+      "command": "python -m pytest -p no:capture tests/react_agent_test.py tests/plan_test.py tests/session_test.py -q",
+      "result": "pass",
+      "details": "Diagnostic workaround run: 5 passed in 1.27s."
+    }
+  ],
+  "risks": [
+    "Pytest capture plugin segfaults in current Python environment.",
+    "Several upstream commits were skipped as empty after preserving easy-only deletions and APIs."
+  ]
+}
