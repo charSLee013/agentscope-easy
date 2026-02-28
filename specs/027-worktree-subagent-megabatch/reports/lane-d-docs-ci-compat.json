@@ -1,0 +1,100 @@
+{
+  "owner": "lane-d",
+  "worktree": "/Users/charslee/Repo/private/wt-027/lane-d",
+  "branch": "027-lane-d-docs-ci-compat",
+  "generated_at": "2026-02-28 21:41:18 CST",
+  "requested_commits": [
+    "81490c8",
+    "fd68067",
+    "eb56d2a",
+    "258ab4d",
+    "542216a",
+    "b56c4dd",
+    "69193a2",
+    "73954db"
+  ],
+  "cherry_pick_results": [
+    {
+      "commit": "81490c8",
+      "status": "skipped",
+      "reason": "empty after minimal conflict resolution",
+      "conflicts": [
+        "README.md",
+        "src/agentscope/_version.py"
+      ],
+      "new_commit": null
+    },
+    {
+      "commit": "fd68067",
+      "status": "applied",
+      "new_commit": "eb81af7e1d2d1e51ff8a41e12323ad1dfdfa02a2",
+      "conflicts": [
+        "docs/tutorial/zh_CN/src/task_eval_openjudge.py"
+      ]
+    },
+    {
+      "commit": "eb56d2a",
+      "status": "applied",
+      "new_commit": "0024adb9e4f23df61514dfdc3a8c39c5bb825bef",
+      "conflicts": [
+        "docs/tutorial/zh_CN/src/task_memory.py"
+      ]
+    },
+    {
+      "commit": "258ab4d",
+      "status": "skipped",
+      "reason": "empty after minimal conflict resolution",
+      "conflicts": [
+        "README.md",
+        "README_zh.md"
+      ],
+      "new_commit": null
+    },
+    {
+      "commit": "542216a",
+      "status": "applied",
+      "new_commit": "e916504324a6e2d9a9d21b657bc14aa30001ab1e",
+      "conflicts": []
+    },
+    {
+      "commit": "b56c4dd",
+      "status": "skipped",
+      "reason": "already applied or empty",
+      "conflicts": [],
+      "new_commit": null
+    },
+    {
+      "commit": "69193a2",
+      "status": "applied",
+      "new_commit": "6f154a78b161925f64b42c2177406c89ae26f866",
+      "conflicts": []
+    },
+    {
+      "commit": "73954db",
+      "status": "skipped",
+      "reason": "empty after minimal conflict resolution",
+      "conflicts": [
+        "src/agentscope/realtime/_base.py"
+      ],
+      "new_commit": null
+    }
+  ],
+  "validation": {
+    "pre_commit": {
+      "command": "pre-commit run --all-files",
+      "status": "passed",
+      "rerun_required": false
+    },
+    "ruff": {
+      "command": "./.venv/bin/python -m ruff check src tests || python -m ruff check src tests",
+      "status": "passed",
+      "notes": "./.venv/bin/python missing; fallback command succeeded"
+    },
+    "pytest": {
+      "command": "./.venv/bin/python -m pytest tests/init_import_test.py tests/model_dashscope_test.py tests/search/test_search_schema_contracts.py -q || python -m pytest tests/init_import_test.py tests/model_dashscope_test.py tests/search/test_search_schema_contracts.py -q",
+      "status": "failed",
+      "notes": "./.venv/bin/python missing; python -m pytest produced no output in this execution environment; equivalent pytest invocation failed during collection",
+      "error": "ModuleNotFoundError: No module named 'docstring_parser'"
+    }
+  }
+}
