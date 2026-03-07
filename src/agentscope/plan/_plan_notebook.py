@@ -150,17 +150,17 @@ class DefaultPlanToHint:
                     ),
                 )
 
+            elif n_done + n_abandoned == len(plan.subtasks):
+                # All subtasks are done or abandoned
+                hint = self.at_the_end.format(
+                    plan=plan.to_markdown(),
+                )
+
             elif n_in_progress == 0 and n_done > 0:
                 # No subtask is in_progress, and some subtasks are done
                 hint = self.when_no_subtask_in_progress.format(
                     plan=plan.to_markdown(),
                     index=n_done,
-                )
-
-            elif n_done + n_abandoned == len(plan.subtasks):
-                # All subtasks are done or abandoned
-                hint = self.at_the_end.format(
-                    plan=plan.to_markdown(),
                 )
 
         if hint:
@@ -328,42 +328,68 @@ class PlanNotebook(StateModule):
             `ToolResponse`:
                 The response of the tool call.
         """
+        # Validate the arguments first
+        response: list[str] = []
+        if isinstance(subtask_idx, str):
+            try:
+                subtask_idx = int(subtask_idx)
+            except ValueError:
+                return ToolResponse(
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=f"Error: Invalid type for argument "
+                            f"'subtask_idx'. Expected 'int', but got "
+                            f"'{type(subtask_idx)}'.",
+                        ),
+                    ],
+                )
+
         if action not in ["add", "revise", "delete"]:
-            return ToolResponse(
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"Invalid action '{action}'. Must be one of "
-                        "'add', 'revise', 'delete'.",
-                    ),
-                ],
+            response.append(
+                f"Invalid action '{action}'. Must be one of 'add', 'revise', "
+                f"'delete'.",
             )
 
         if action in ["add", "revise"] and subtask is None:
-            return ToolResponse(
-                content=[
-                    TextBlock(
-                        type="text",
-                        text=f"The subtask must be provided when action is "
-                        f"'{action}', but got None.",
-                    ),
-                ],
+            response.append(
+                f"The subtask must be provided when action is '{action}', "
+                "but got None.",
             )
 
         self._validate_current_plan()
 
-        # validate subtask_idx
-        if subtask_idx >= len(self.current_plan.subtasks):
+        if action != "add" and subtask_idx >= len(
+            self.current_plan.subtasks,
+        ):
+            response.append(
+                f"Invalid subtask_idx '{subtask_idx}' for action "
+                f"'{action}'. Must be between 0 "
+                f"and {len(self.current_plan.subtasks) - 1}.",
+            )
+
+        if action == "add" and not (
+            0 <= subtask_idx <= len(self.current_plan.subtasks)
+        ):
+            max_idx = len(self.current_plan.subtasks)
+            response.append(
+                f"Invalid subtask_idx '{subtask_idx}' for action 'add'. "
+                f"Must be between 0 and {max_idx}.",
+            )
+
+        if response:
             return ToolResponse(
                 content=[
                     TextBlock(
                         type="text",
-                        text=f"Invalid subtask_idx '{subtask_idx}'. Must "
-                        f"be between 0 and "
-                        f"{len(self.current_plan.subtasks) - 1}.",
+                        text="Error: " + response[0],
                     ),
                 ],
             )
+
+        if subtask is not None:
+            # Convert to SubTask model if it's a dict
+            subtask = SubTask.model_validate(subtask)
 
         if action == "delete":
             subtask = self.current_plan.subtasks.pop(subtask_idx)
@@ -391,6 +417,7 @@ class PlanNotebook(StateModule):
                 ],
             )
 
+        # revise
         self.current_plan.subtasks[subtask_idx] = subtask
         await self._trigger_plan_change_hooks()
         return ToolResponse(
@@ -421,6 +448,23 @@ class PlanNotebook(StateModule):
                 specific outcome.
         """
         self._validate_current_plan()
+
+        if isinstance(subtask_idx, str):
+            try:
+                subtask_idx = int(subtask_idx)
+            except ValueError:
+                pass
+
+        if not isinstance(subtask_idx, int):
+            return ToolResponse(
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"Invalid type for argument 'subtask_idx'. "
+                        f"Expected 'int', but got '{type(subtask_idx)}'.",
+                    ),
+                ],
+            )
 
         if not 0 <= subtask_idx < len(self.current_plan.subtasks):
             return ToolResponse(
@@ -521,6 +565,23 @@ class PlanNotebook(StateModule):
                 "There are 5 articles about xxx, they are\n- xxx\n- xxx\n..."
         """
         self._validate_current_plan()
+
+        if isinstance(subtask_idx, str):
+            try:
+                subtask_idx = int(subtask_idx)
+            except ValueError:
+                pass
+
+        if not isinstance(subtask_idx, int):
+            return ToolResponse(
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"Invalid type for argument 'subtask_idx'. "
+                        f"Expected 'int', but got '{type(subtask_idx)}'.",
+                    ),
+                ],
+            )
 
         if not 0 <= subtask_idx < len(self.current_plan.subtasks):
             return ToolResponse(

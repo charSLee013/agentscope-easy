@@ -1,0 +1,71 @@
+{
+  "owner": "lane-c",
+  "worktree": "/Users/charslee/Repo/private/wt-027/lane-c",
+  "branch": "027-lane-c-rag-plan-reader",
+  "task": "rag/plan/reader cherry-pick and validation",
+  "cherry_picks": [
+    {
+      "input_commit": "bf952e7",
+      "result": "applied",
+      "new_commit": "49aa33e",
+      "x_preserved": true,
+      "conflicts": [
+        {
+          "file": "src/agentscope/rag/_reader/_word_reader.py",
+          "resolution": "Kept _VML_NS-based VML textbox lookup and removed conflict markers"
+        }
+      ]
+    },
+    {
+      "input_commit": "593b958",
+      "result": "applied",
+      "new_commit": "fae9f5f",
+      "x_preserved": true,
+      "conflicts": [
+        {
+          "file": "src/agentscope/plan/_plan_notebook.py",
+          "resolution": "Used theirs to preserve commit-intended argument-validation and hint updates"
+        }
+      ]
+    },
+    {
+      "input_commit": "a2bf80e",
+      "result": "skipped",
+      "reason": "empty cherry-pick (already applied after prior resolutions)",
+      "x_preserved": false,
+      "conflicts": []
+    },
+    {
+      "input_commit": "233915d",
+      "result": "applied",
+      "new_commit": "8d8d855",
+      "x_preserved": true,
+      "conflicts": [
+        {
+          "file": "examples/functionality/long_term_memory/mem0/memory_example.py",
+          "resolution": "Used theirs to preserve commit-intended mem0 graphstore example changes"
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "pre_commit_all_files": {
+      "status": "pass"
+    },
+    "ruff_src_tests": {
+      "command": "./.venv/bin/python -m ruff check src tests || python -m ruff check src tests",
+      "status": "pass",
+      "notes": "./.venv/bin/python missing; fallback python -m ruff passed"
+    },
+    "pytest_selected": {
+      "command": "./.venv/bin/python -m pytest tests/plan_test.py tests/rag_reader_test.py tests/rag_knowledge_test.py -q || python -m pytest tests/plan_test.py tests/rag_reader_test.py tests/rag_knowledge_test.py -q",
+      "status": "fail",
+      "notes": [
+        "./.venv/bin/python missing",
+        "python -m pytest exited with code 139 (segmentation fault)",
+        "diagnostic pytest executable run failed at collection with missing dependencies: docstring_parser, dashscope"
+      ]
+    }
+  },
+  "final_status": "completed_with_test_environment_issues"
+}
