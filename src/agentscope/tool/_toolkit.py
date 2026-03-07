@@ -191,6 +191,7 @@ class Toolkit(StateModule):
         tool_func: ToolFunction,
         group_name: str | Literal["basic"] = "basic",
         preset_kwargs: dict[str, JSONSerializableObject] | None = None,
+        func_name: str | None = None,
         func_description: str | None = None,
         json_schema: dict | None = None,
         include_long_description: bool = True,
@@ -220,6 +221,9 @@ class Toolkit(StateModule):
             optional):
                 Preset arguments by the user, which will not be included in
                 the JSON schema, nor exposed to the agent.
+            func_name (`str | None`, optional):
+                The custom function name. If not provided, the function name
+                will be extracted from the function automatically.
             func_description (`str | None`, optional):
                 The function description. If not provided, the description
                 will be extracted from the docstring automatically.
@@ -265,9 +269,8 @@ class Toolkit(StateModule):
         # Handle MCP tool function and regular function respectively
         mcp_name = None
         if isinstance(tool_func, MCPToolFunction):
-            func_name = tool_func.name
+            input_func_name = tool_func.name
             original_func = tool_func.__call__
-            self._validate_tool_function(func_name)
             json_schema = json_schema or tool_func.json_schema
             mcp_name = tool_func.mcp_name
 
@@ -288,9 +291,8 @@ class Toolkit(StateModule):
                 **(preset_kwargs or {}),
             }
 
-            func_name = tool_func.func.__name__
+            input_func_name = tool_func.func.__name__
             original_func = tool_func.func
-            self._validate_tool_function(func_name)
             json_schema = json_schema or self._parse_tool_function(
                 tool_func.func,
                 include_long_description=include_long_description,
@@ -300,15 +302,18 @@ class Toolkit(StateModule):
 
         else:
             # normal function
-            func_name = tool_func.__name__
+            input_func_name = tool_func.__name__
             original_func = tool_func
-            self._validate_tool_function(func_name)
             json_schema = json_schema or self._parse_tool_function(
                 tool_func,
                 include_long_description=include_long_description,
                 include_var_positional=include_var_positional,
                 include_var_keyword=include_var_keyword,
             )
+
+        func_name = func_name or input_func_name
+        self._validate_tool_function(func_name)
+        json_schema["function"]["name"] = func_name
 
         # Override the description if provided
         if func_description:
