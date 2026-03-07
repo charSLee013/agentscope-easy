@@ -1,9 +1,9 @@
 # Feature Specification: Worktree subagent megabatch closeout
 
-**Feature Branch**: `027-worktree-subagent-megabatch`  
-**Base Branch**: `easy`  
-**Created**: 2026-02-28  
-**Status**: Draft  
+- **Feature Branch**: `027-worktree-subagent-megabatch`
+- **Base Branch**: `easy`
+- **Created**: 2026-02-28
+- **Status**: Draft
 **Input**: User description: "一次性并行吸收中低风险提交，减少重复劳动"
 
 ## User Scenarios & Testing

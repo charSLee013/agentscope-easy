@@ -1,7 +1,7 @@
 # Implementation Plan: 027 worktree subagent megabatch closeout
 
-**Branch**: `027-worktree-subagent-megabatch`  
-**Date**: 2026-02-28  
+- **Branch**: `027-worktree-subagent-megabatch`
+- **Date**: 2026-02-28
 **Spec**: `specs/027-worktree-subagent-megabatch/spec.md`
 
 ## Summary

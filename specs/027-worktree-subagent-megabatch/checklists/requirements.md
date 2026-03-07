@@ -1,7 +1,7 @@
 # Specification Quality Checklist: 027-worktree-subagent-megabatch
 
-**Purpose**: Validate fan-out/fan-in closeout quality  
-**Created**: 2026-02-28  
+- **Purpose**: Validate fan-out/fan-in closeout quality
+- **Created**: 2026-02-28
 **Feature**: `specs/027-worktree-subagent-megabatch/spec.md`
 
 ## Scope and Safety
