@@ -4,6 +4,8 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -26,6 +28,8 @@ myst_enable_extensions = [
     "colon_fence",
 ]
 
+IN_CI = os.environ.get("CI", "").lower() in {"1", "true", "yes"}
+
 sphinx_gallery_conf = {
     "download_all_examples": False,
     "examples_dirs": [
@@ -34,7 +38,7 @@ sphinx_gallery_conf = {
     "gallery_dirs": [
         "tutorial",
     ],
-    "filename_pattern": "src/.*\.py",
+    "filename_pattern": r"$^" if IN_CI else r"src/.*\.py",
     "example_extensions": [".py"],
 }
 
