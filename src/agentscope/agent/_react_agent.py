@@ -406,7 +406,6 @@ class ReActAgent(ReActAgentBase):
         if self._static_control:
             await self.long_term_memory.record(
                 [
-                    *([*msg] if isinstance(msg, list) else [msg]),
                     *await self.memory.get_memory(),
                     reply_msg,
                 ],
@@ -769,6 +768,7 @@ class ReActAgent(ReActAgentBase):
 
             # Rewrite the query by the LLM if enabled
             if self.enable_rewrite_query:
+                stream_tmp = self.model.stream
                 try:
                     rewrite_prompt = await self.formatter.format(
                         msgs=[
@@ -787,13 +787,11 @@ class ReActAgent(ReActAgentBase):
                             ),
                         ],
                     )
-                    stream_tmp = self.model.stream
                     self.model.stream = False
                     res = await self.model(
                         rewrite_prompt,
                         structured_model=_QueryRewriteModel,
                     )
-                    self.model.stream = stream_tmp
                     if res.metadata and res.metadata.get("rewritten_query"):
                         query = res.metadata["rewritten_query"]
 
@@ -802,6 +800,8 @@ class ReActAgent(ReActAgentBase):
                         "Skipping the query rewriting due to error: %s",
                         str(e),
                     )
+                finally:
+                    self.model.stream = stream_tmp
 
             docs: list[Document] = []
             for kb in self.knowledge:
