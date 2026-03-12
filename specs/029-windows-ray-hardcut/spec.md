@@ -1,9 +1,9 @@
 # Feature Specification: Windows RayEvaluator hard cut
 
-**Feature Branch**: `029-windows-ray-hardcut`  
-**Base Branch**: `easy` (do not use `main/master` as mainline)  
-**Created**: 2026-03-10  
-**Status**: Draft  
+**Feature Branch**: `029-windows-ray-hardcut`
+**Base Branch**: `easy` (do not use `main/master` as mainline)
+**Created**: 2026-03-10
+**Status**: Draft
 **Input**: User description: "明确放弃 Windows 原生 RayEvaluator 支持，统一测试文档和运行时口径"
 
 ## User Scenarios & Testing
