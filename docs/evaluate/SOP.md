@@ -3,7 +3,7 @@
 ## 一、功能定义（Scope/非目标）
 ### 1. 设计思路和逻辑
 - 为 AgentScope 的应用提供统一的离线评测框架：定义任务（Task）、解决方案（Solution）、指标（Metric）、基准集合（Benchmark）及执行器（Evaluator），并可将结果持久化/聚合。
-- 支持串行调试（GeneralEvaluator）与分布式/并行执行（RayEvaluator），复用同一任务与指标定义。
+- 支持串行调试（GeneralEvaluator）与分布式/并行执行（RayEvaluator），复用同一任务与指标定义；`RayEvaluator` 不支持原生 Windows，建议使用 WSL2 或 Linux/macOS。
 - 不直接评判业务逻辑，评测标准完全由用户编写的 `MetricBase` 决定；框架不管理评测数据分发或安全隔离。
 
 ### 2. 架构设计
@@ -46,7 +46,7 @@ graph TD
 - **BenchmarkBase**：提供任务集合的迭代、索引与长度；可根据需要实现加载数据集、划分子集等逻辑。
 - **EvaluatorBase**：管理评测主流程；保存评测元信息（`_save_evaluation_meta`）、运行评测（抽象 `run`）、聚合结果（`aggregate`）。
 - **GeneralEvaluator**：调试友好的串行执行器；对每个 task/repeat 调用用户提供的 `solution` 协程，缓存 `SolutionOutput`，随后调用 `Task.evaluate` 并把结果写入存储。
-- **RayEvaluator**：基于 Ray 的并行实现（当安装 Ray 时可用），接口与 GeneralEvaluator 保持一致。
+- **RayEvaluator**：基于 Ray 的并行实现（当安装 Ray 时可用），接口与 GeneralEvaluator 保持一致；原生 Windows 不支持。
 - **EvaluatorStorageBase/FileEvaluatorStorage**：定义保存/读取 Solution、Metric、聚合结果的接口；文件实现将结果写入本地文件结构，并提供 `get_agent_pre_print_hook` 用于抓取 Agent 输出。
 - **aggregate**：统计完成/未完成任务、各指标分布及数值聚合（均值/最大/最小），写入存储用于后续分析。
 
@@ -110,7 +110,7 @@ graph TD
   3. Evaluator 调用 Solution → 生成 `SolutionOutput` → 通过 `Task.evaluate` 计算指标 → `EvaluatorStorage` 写入。
   4. 评测结束后调用 `aggregate` 生成统计信息。
 - **Plan/Memory/Toolkit**：在 solution 内部可结合多 Agent、Plan、Memory 等组件；评测框架对此保持透明。
-- **并行执行**：RayEvaluator 使用 Ray 远程任务；需确保 `SolutionOutput`、`Task`、`Metric`、`Benchmark` 可序列化。
+- **并行执行**：RayEvaluator 使用 Ray 远程任务；需确保 `SolutionOutput`、`Task`、`Metric`、`Benchmark` 可序列化。原生 Windows 环境不在支持范围内，推荐使用 WSL2。
 - **责任边界**：评测框架不保证解决方案幂等、不做任务调度重试；数据加载、缓存和权限控制由调用方负责。
 
 ## 五、测试文件

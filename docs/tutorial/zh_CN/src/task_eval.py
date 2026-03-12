@@ -11,6 +11,9 @@ AgentScope 提供了一个内置的评测框架，用于评测智能体在不同
 - 支持中断后继续评估
 - [开发中] 评估结果可视化
 
+.. note:: ``RayEvaluator`` 不支持原生 Windows。需要使用基于 Ray 的评估时，
+   请使用 WSL2 或 Linux/macOS。
+
 .. note:: 我们正在持续集成新的基准测试到 AgentScope 中：
 
  - ✅ `ACEBench <https://github.com/ACEBench/ACEBench>`_
@@ -179,7 +182,8 @@ class ToyBenchmark(BenchmarkBase):
 # 执行结果和轨迹的逻辑。下面是一个
 # 使用我们的玩具基准测试运行 ``GeneralEvaluator`` (通用评估器) 的示例。如果有一个大型
 # 基准测试，开发者希望通过并行化更高效地进行评估，
-# ``RayEvaluator`` (Ray评估器) 也可作为内置解决方案使用。
+# ``RayEvaluator`` (Ray评估器) 也可作为内置解决方案使用。原生 Windows
+# 环境请通过 WSL2 运行。
 
 
 import os

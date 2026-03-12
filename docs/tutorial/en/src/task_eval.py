@@ -11,6 +11,9 @@ AgentScope provides a built-in evaluation framework for assessing agent performa
 - Support continuation after interruption
 - 🚧 Visualization of evaluation results
 
+.. note:: ``RayEvaluator`` is not supported on native Windows. Use WSL2 or
+   Linux/macOS when you need Ray-based evaluation.
+
 .. note:: We are keeping integrating new benchmarks into AgentScope:
 
  - ✅ `ACEBench <https://github.com/ACEBench/ACEBench>`_
@@ -181,7 +184,7 @@ class ToyBenchmark(BenchmarkBase):
 # running ``GeneralEvaluator`` with our toy benchmark. If there is a large
 # benchmark and the developer wants to get the evaluation more efficiently
 # through parallelization, ``RayEvaluator`` is available as a built-in solution
-# as well.
+# as well. Native Windows users should run this through WSL2 instead.
 
 
 import os
