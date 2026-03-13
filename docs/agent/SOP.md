@@ -48,6 +48,7 @@ graph TD
 - **统一入口**：`reply`（生成响应）、`observe`（被动监听）、`print`（面向 UI 的块输出）、`interrupt`（取消当前任务并调用 `handle_interrupt`）。
 - **Hook 系统**：支持类级和实例级前/后置 Hook；`_AgentMeta` 在类创建阶段织入 Hook 包装。
 - **流式输出**：`print` 将文本/思考/图像/音频块写入 `_stream_prefix` 缓存；可选消息队列供管线聚合。
+- **控制台开关**：`AgentBase` 支持通过环境变量 `AGENTSCOPE_DISABLE_CONSOLE_OUTPUT=true` 在初始化时默认关闭控制台输出。
 - **广播**：`_subscribers` 管理 MsgHub 订阅，`_broadcast_to_subscribers` 将生成的回复推送给其他 Agent 的 `observe`。
 - **中断**：`_reply_task` 追踪当前 `reply`，`interrupt` 取消任务并触发自定义处理。
 
