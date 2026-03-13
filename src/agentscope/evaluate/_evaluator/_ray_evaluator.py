@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """The evaluator base class in agentscope."""
 import asyncio
+import platform
 from typing import Callable, Awaitable, Coroutine, Any
 
 from .._benchmark_base import BenchmarkBase
@@ -19,6 +20,15 @@ def _check_ray_available() -> None:
             "Ray is not installed. Please install it with `pip install ray` "
             "to use the RayEvaluator.",
         ) from e
+
+
+def _check_ray_supported_platform() -> None:
+    """Reject native Windows for RayEvaluator and point users to WSL2."""
+    if platform.system() == "Windows":
+        raise RuntimeError(
+            "RayEvaluator is not supported on native Windows. Please use "
+            "WSL2 or Linux/macOS instead.",
+        )
 
 
 # Create a conditional decorator for ray.remote
@@ -161,6 +171,8 @@ class RayEvaluator(EvaluatorBase):
             n_repeat=n_repeat,
             storage=storage,
         )
+
+        _check_ray_supported_platform()
 
         # Check ray availability early
         _check_ray_available()

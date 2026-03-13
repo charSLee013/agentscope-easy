@@ -5,6 +5,7 @@ import sys
 import shutil
 from typing import Generator, Callable, Any, cast
 from unittest.async_case import IsolatedAsyncioTestCase
+from unittest.mock import patch
 import ray
 
 from agentscope.agent import AgentBase
@@ -248,8 +249,8 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
         """Test ray evaluator."""
         if IS_WINDOWS:
             self.skipTest(
-                "Skip Ray evaluator on Windows due to unstable ray node "
-                "startup in CI.",
+                "Skip Ray evaluator on native Windows. Use WSL2 or "
+                "Linux/macOS instead.",
             )
 
         evaluator = RayEvaluator(
@@ -282,6 +283,24 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
             metric_result_2.result,
             0.0,
         )
+
+    async def test_ray_evaluator_rejects_native_windows(self) -> None:
+        """Test RayEvaluator rejects native Windows at runtime."""
+        with patch(
+            "agentscope.evaluate._evaluator._ray_evaluator.platform.system",
+            return_value="Windows",
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "native Windows.*WSL2 or Linux/macOS",
+            ):
+                RayEvaluator(
+                    name="Test evaluation",
+                    benchmark=ToyBenchmark(),
+                    n_repeat=1,
+                    storage=self.file_storage_ray,
+                    n_workers=1,
+                )
 
     async def asyncTearDown(self) -> None:
         """Clean up the test environment."""
