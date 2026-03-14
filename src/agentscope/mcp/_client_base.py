@@ -67,6 +67,23 @@ class MCPClientBase:
                         ),
                     ),
                 )
+            elif isinstance(content, mcp.types.EmbeddedResource):
+                if isinstance(
+                    content.resource,
+                    mcp.types.TextResourceContents,
+                ):
+                    as_content.append(
+                        TextBlock(
+                            type="text",
+                            text=content.resource.model_dump_json(indent=2),
+                        ),
+                    )
+                else:
+                    logger.error(
+                        "Unsupported EmbeddedResource content type: %s. "
+                        "Skipping this content.",
+                        type(content.resource),
+                    )
             else:
                 logger.warning(
                     "Unsupported content type: %s. Skipping this content.",

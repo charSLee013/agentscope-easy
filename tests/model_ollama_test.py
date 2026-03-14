@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """Unit tests for Ollama API model class."""
+from types import SimpleNamespace
 from typing import AsyncGenerator, Any
 from unittest.async_case import IsolatedAsyncioTestCase
 from unittest.mock import patch, AsyncMock
 from pydantic import BaseModel
 
 from agentscope.model import OllamaChatModel, ChatResponse
+from agentscope.embedding import OllamaTextEmbedding
 from agentscope.message import TextBlock, ToolUseBlock, ThinkingBlock
 
 
@@ -365,3 +367,40 @@ class TestOllamaChatModel(IsolatedAsyncioTestCase):
         """Create an asynchronous generator."""
         for item in items:
             yield item
+
+
+class TestOllamaTextEmbedding(IsolatedAsyncioTestCase):
+    """Test cases for OllamaTextEmbedding."""
+
+    async def test_call_uses_embed_api(self) -> None:
+        """Ollama embeddings should use the batch embed API."""
+        with patch("ollama.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.embed = AsyncMock(
+                return_value=SimpleNamespace(
+                    embeddings=[[0.1, 0.2], [0.3, 0.4]],
+                ),
+            )
+
+            model = OllamaTextEmbedding(
+                model_name="nomic-embed-text",
+                dimensions=2,
+                host="http://localhost:11434",
+                timeout=30,
+            )
+            model.client = mock_client
+
+            res = await model(
+                ["hello", TextBlock(type="text", text="world")],
+                truncate=True,
+            )
+
+            mock_client.embed.assert_awaited_once_with(
+                input=["hello", "world"],
+                model="nomic-embed-text",
+                dimensions=2,
+                truncate=True,
+            )
+            self.assertEqual(res.embeddings, [[0.1, 0.2], [0.3, 0.4]])
+            self.assertGreaterEqual(res.usage.time, 0)
