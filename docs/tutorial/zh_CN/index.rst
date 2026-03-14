@@ -40,6 +40,7 @@ Welcome to AgentScope's documentation!
    tutorial/task_tool
    tutorial/task_memory
    tutorial/task_long_term_memory
+   tutorial/task_tts
    tutorial/task_agent
    tutorial/task_pipeline
    tutorial/task_plan

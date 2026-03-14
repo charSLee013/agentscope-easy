@@ -2,7 +2,8 @@
 # pylint: disable=not-an-iterable
 """ReAct agent class in agentscope."""
 import asyncio
-from typing import Type, Any, AsyncGenerator, Literal
+from dataclasses import dataclass
+from typing import Type, Any, Literal
 
 import shortuuid
 from pydantic import BaseModel, ValidationError, Field
@@ -10,6 +11,7 @@ from pydantic import BaseModel, ValidationError, Field
 from ._react_agent_base import ReActAgentBase
 from ._subagent_base import SubAgentBase
 from ._subagent_tool import SubAgentSpec, make_subagent_tool
+from ._utils import _AsyncNullContext
 from .._logging import logger
 from ..formatter import FormatterBase
 from ..memory import MemoryBase, LongTermMemoryBase, InMemoryMemory
@@ -19,6 +21,7 @@ from ..rag import KnowledgeBase, Document
 from ..plan import PlanNotebook
 from ..tool import Toolkit, ToolResponse
 from ..tracing import trace_reply
+from ..tts import TTSModelBase
 
 
 class _QueryRewriteModel(BaseModel):
@@ -29,6 +32,14 @@ class _QueryRewriteModel(BaseModel):
             "The rewritten query, which should be specific and concise. "
         ),
     )
+
+
+@dataclass
+class _ActingOutcome:
+    """Return value from one acting step."""
+
+    reply_msg: Msg | None = None
+    structured_output: dict[str, Any] | None = None
 
 
 def finish_function_pre_print_hook(
@@ -54,9 +65,12 @@ def finish_function_pre_print_hook(
                 # Convert the response argument into a text block for
                 # displaying
                 try:
+                    response = block["input"].get("response")
+                    if not response:
+                        return None
                     msg.content[i] = TextBlock(
                         type="text",
-                        text=block["input"].get("response", ""),
+                        text=response,
                     )
                     return kwargs
                 except Exception:
@@ -99,6 +113,7 @@ class ReActAgent(ReActAgentBase):
         plan_notebook: PlanNotebook | None = None,
         print_hint_msg: bool = False,
         max_iters: int = 10,
+        tts_model: TTSModelBase | None = None,
     ) -> None:
         """Initialize the ReAct agent
 
@@ -156,6 +171,8 @@ class ReActAgent(ReActAgentBase):
                 the long-term memory and knowledge base(s).
             max_iters (`int`, defaults to `10`):
                 The maximum number of iterations of the reasoning-acting loops.
+            tts_model (`TTSModelBase | None`, optional):
+                The optional text-to-speech model used for spoken replies.
         """
         super().__init__()
 
@@ -171,6 +188,7 @@ class ReActAgent(ReActAgentBase):
         self.max_iters = max_iters
         self.model = model
         self.formatter = formatter
+        self.tts_model = tts_model
 
         # -------------- Memory management --------------
         # Record the dialogue history in the memory
@@ -280,7 +298,10 @@ class ReActAgent(ReActAgentBase):
     @property
     def sys_prompt(self) -> str:
         """The dynamic system prompt of the agent."""
-        return self._sys_prompt
+        skill_prompt = self.toolkit.get_agent_skill_prompt()
+        if not skill_prompt:
+            return self._sys_prompt
+        return f"{self._sys_prompt}\n\n{skill_prompt}"
 
     async def register_subagent(
         self,
@@ -289,6 +310,7 @@ class ReActAgent(ReActAgentBase):
         *,
         tool_name: str | None = None,
         ephemeral_memory: bool = True,
+        override_model: ChatModelBase | None = None,
     ) -> str:
         """Register a SubAgent skeleton as a toolkit tool."""
         tool_func, register_kwargs = await make_subagent_tool(
@@ -297,6 +319,7 @@ class ReActAgent(ReActAgentBase):
             host=self,
             tool_name=tool_name,
             ephemeral_memory=ephemeral_memory,
+            override_model=override_model,
         )
 
         resolved_group = register_kwargs.pop("group_name", "subagents")
@@ -363,16 +386,17 @@ class ReActAgent(ReActAgentBase):
         tool_choice: Literal["auto", "none", "required"] | None = None
 
         self._required_structured_model = structured_model
+        self.toolkit.set_extended_model(
+            self.finish_function_name,
+            structured_model,
+        )
         # Record structured output model if provided
         if structured_model:
-            self.toolkit.set_extended_model(
-                self.finish_function_name,
-                structured_model,
-            )
             tool_choice = "required"
 
         # The reasoning-acting loop
         reply_msg = None
+        structured_output = None
         for _ in range(self.max_iters):
             msg_reasoning = await self._reasoning(tool_choice)
 
@@ -391,16 +415,55 @@ class ReActAgent(ReActAgentBase):
                 # Sequential tool calls
                 acting_responses = [await _ for _ in futures]
 
-            # Find the first non-None replying message from the acting
-            for acting_msg in acting_responses:
-                reply_msg = reply_msg or acting_msg
+            for acting_outcome in acting_responses:
+                if acting_outcome is None:
+                    continue
 
-            if reply_msg:
+                if acting_outcome.structured_output is not None:
+                    structured_output = acting_outcome.structured_output
+
+                if acting_outcome.reply_msg is not None and reply_msg is None:
+                    if (
+                        structured_output is not None
+                        and acting_outcome.reply_msg.metadata is None
+                    ):
+                        acting_outcome.reply_msg.metadata = structured_output
+                    reply_msg = acting_outcome.reply_msg
+
+            if reply_msg is not None:
                 break
+
+            if structured_output is not None:
+                if msg_reasoning.has_content_blocks("text"):
+                    reply_msg = Msg(
+                        self.name,
+                        msg_reasoning.get_content_blocks("text"),
+                        "assistant",
+                        metadata=structured_output,
+                    )
+                    break
+
+                hint_msg = Msg(
+                    "user",
+                    "<system-hint>Now generate a text response based on "
+                    "your finished task.</system-hint>",
+                    "user",
+                )
+                await self._reasoning_hint_msgs.add(hint_msg)
+                if self.print_hint_msg:
+                    await self.print(hint_msg, True)
+                self._required_structured_model = None
+                self.toolkit.set_extended_model(
+                    self.finish_function_name,
+                    None,
+                )
+                tool_choice = "none"
 
         # When the maximum iterations are reached
         if reply_msg is None:
             reply_msg = await self._summarizing()
+            if structured_output is not None and reply_msg.metadata is None:
+                reply_msg.metadata = structured_output
 
         # Post-process the memory, long-term memory
         if self._static_control:
@@ -414,6 +477,7 @@ class ReActAgent(ReActAgentBase):
         await self.memory.add(reply_msg)
         return reply_msg
 
+    # pylint: disable=too-many-branches
     async def _reasoning(
         self,
         tool_choice: Literal["auto", "none", "required"] | None = None,
@@ -447,21 +511,44 @@ class ReActAgent(ReActAgentBase):
         # handle output from the model
         interrupted_by_user = False
         msg = None
+        tts_context = self.tts_model or _AsyncNullContext()
+        speech = None
+        saw_model_audio = False
         try:
-            if self.model.stream:
+            async with tts_context:
                 msg = Msg(self.name, [], "assistant")
-                async for content_chunk in res:
-                    msg.content = content_chunk.content
-                    await self.print(msg, False)
-                await self.print(msg, True)
+                if self.model.stream:
+                    async for content_chunk in res:
+                        msg.content = content_chunk.content
+                        speech = msg.get_content_blocks("audio") or None
+                        saw_model_audio = bool(speech)
+                        if (
+                            self.tts_model
+                            and not saw_model_audio
+                            and self.tts_model.supports_streaming_input
+                        ):
+                            tts_res = await self.tts_model.push(msg)
+                            speech = tts_res.content
+                        await self.print(msg, False, speech=speech)
+                else:
+                    msg = Msg(self.name, list(res.content), "assistant")
+                    speech = msg.get_content_blocks("audio") or None
+                    saw_model_audio = bool(speech)
+
+                if self.tts_model and not saw_model_audio:
+                    tts_res = await self.tts_model.synthesize(msg)
+                    if self.tts_model.stream:
+                        async for tts_chunk in tts_res:
+                            speech = tts_chunk.content
+                            await self.print(msg, False, speech=speech)
+                    else:
+                        speech = tts_res.content
+
+                await self.print(msg, True, speech=speech)
 
                 # Add a tiny sleep to yield the last message object in the
                 # message queue
                 await asyncio.sleep(0.001)
-
-            else:
-                msg = Msg(self.name, list(res.content), "assistant")
-                await self.print(msg, True)
 
         except asyncio.CancelledError as e:
             interrupted_by_user = True
@@ -508,7 +595,10 @@ class ReActAgent(ReActAgentBase):
                     await self.print(msg_res, True)
         return msg
 
-    async def _acting(self, tool_call: ToolUseBlock) -> Msg | None:
+    async def _acting(
+        self,
+        tool_call: ToolUseBlock,
+    ) -> _ActingOutcome | None:
         """Perform the acting process.
 
         Args:
@@ -516,9 +606,9 @@ class ReActAgent(ReActAgentBase):
                 The tool use block to be executed.
 
         Returns:
-            `Union[Msg, None]`:
-                Return a message to the user if the `finish_function` is
-                called, otherwise return `None`.
+            `_ActingOutcome | None`:
+                Return the response and/or structured output produced by the
+                acting step.
         """
 
         tool_res_msg = Msg(
@@ -538,6 +628,7 @@ class ReActAgent(ReActAgentBase):
             tool_res = await self.toolkit.call_tool_function(tool_call)
 
             response_msg = None
+            structured_output = None
             # Async generator handling
             async for chunk in tool_res:
                 # Turn into a tool result block
@@ -570,9 +661,29 @@ class ReActAgent(ReActAgentBase):
                         True,
                     )
                 ):
+                    structured_output = chunk.metadata.get(
+                        "structured_output",
+                    )
                     response_msg = chunk.metadata.get("response_msg")
+                    if (
+                        response_msg is None
+                        and structured_output is not None
+                        and "response" in tool_call.get("input", {})
+                    ):
+                        response_msg = Msg(
+                            self.name,
+                            tool_call["input"]["response"],
+                            "assistant",
+                            metadata=structured_output,
+                        )
 
-            return response_msg
+            if response_msg is None and structured_output is None:
+                return None
+
+            return _ActingOutcome(
+                reply_msg=response_msg,
+                structured_output=structured_output,
+            )
 
         finally:
             # Record the tool result message in the memory
@@ -610,18 +721,40 @@ class ReActAgent(ReActAgentBase):
         #  finish_function here
         res = await self.model(prompt)
 
-        res_msg = Msg(self.name, [], "assistant")
-        if isinstance(res, AsyncGenerator):
-            async for chunk in res:
-                res_msg.content = chunk.content
-                await self.print(res_msg, False)
-            await self.print(res_msg, True)
+        tts_context = self.tts_model or _AsyncNullContext()
+        speech = None
+        saw_model_audio = False
+        async with tts_context:
+            res_msg = Msg(self.name, [], "assistant")
+            if self.model.stream:
+                async for chunk in res:
+                    res_msg.content = chunk.content
+                    speech = res_msg.get_content_blocks("audio") or None
+                    saw_model_audio = bool(speech)
+                    if (
+                        self.tts_model
+                        and not saw_model_audio
+                        and self.tts_model.supports_streaming_input
+                    ):
+                        tts_res = await self.tts_model.push(res_msg)
+                        speech = tts_res.content
+                    await self.print(res_msg, False, speech=speech)
+            else:
+                res_msg.content = res.content
+                speech = res_msg.get_content_blocks("audio") or None
+                saw_model_audio = bool(speech)
 
-        else:
-            res_msg.content = res.content
-            await self.print(res_msg, True)
+            if self.tts_model and not saw_model_audio:
+                tts_res = await self.tts_model.synthesize(res_msg)
+                if self.tts_model.stream:
+                    async for tts_chunk in tts_res:
+                        speech = tts_chunk.content
+                        await self.print(res_msg, False, speech=speech)
+                else:
+                    speech = tts_res.content
 
-        return res_msg
+            await self.print(res_msg, True, speech=speech)
+            return res_msg
 
     # pylint: disable=unused-argument
     async def handle_interrupt(
@@ -656,7 +789,7 @@ class ReActAgent(ReActAgentBase):
 
     def generate_response(
         self,
-        response: str,
+        response: str | None = None,
         **kwargs: Any,
     ) -> ToolResponse:
         """Generate a response. Note only the input argument `response` is
@@ -667,22 +800,27 @@ class ReActAgent(ReActAgentBase):
             response (`str`):
                 Your response to the user.
         """
-        response_msg = Msg(
-            self.name,
-            response,
-            "assistant",
-        )
+        response_msg = None
+        if response is not None:
+            response_msg = Msg(
+                self.name,
+                response,
+                "assistant",
+            )
 
         # Prepare structured output
+        structured_output = None
         if self._required_structured_model:
             try:
                 # Use the metadata field of the message to store the
                 # structured output
-                response_msg.metadata = (
+                structured_output = (
                     self._required_structured_model.model_validate(
                         kwargs,
                     ).model_dump()
                 )
+                if response_msg is not None:
+                    response_msg.metadata = structured_output
 
             except ValidationError as e:
                 return ToolResponse(
@@ -708,6 +846,7 @@ class ReActAgent(ReActAgentBase):
             metadata={
                 "success": True,
                 "response_msg": response_msg,
+                "structured_output": structured_output,
             },
             is_last=True,
         )

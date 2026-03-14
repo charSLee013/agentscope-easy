@@ -3,7 +3,7 @@
 from typing import Any
 from unittest.async_case import IsolatedAsyncioTestCase
 
-from agentscope.message import Msg
+from agentscope.message import AudioBlock, Base64Source, Msg
 from agentscope.pipeline import (
     MsgHub,
     SequentialPipeline,
@@ -78,6 +78,44 @@ class StreamAgent(AgentBase):
 
     async def observe(self, msg: Msg | list[Msg] | None) -> None:
         """Observe function"""
+
+    async def handle_interrupt(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Msg:
+        """Handle interrupt"""
+
+
+class SpeechStreamAgent(AgentBase):
+    """Agent that emits message plus speech side channel."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.name = "SpeechStream"
+        self.speech = AudioBlock(
+            type="audio",
+            source=Base64Source(
+                type="base64",
+                data="speech",
+                media_type="audio/pcm",
+            ),
+        )
+
+    async def reply(self) -> Msg | None:
+        await self.print(
+            Msg(
+                self.name,
+                "spoken",
+                "assistant",
+            ),
+            True,
+            speech=self.speech,
+        )
+        return None
+
+    async def observe(self, msg: Msg | list[Msg] | None) -> None:
+        """Observe function."""
 
     async def handle_interrupt(
         self,
@@ -448,3 +486,21 @@ class PipelineTest(IsolatedAsyncioTestCase):
         )
         # Verify that exception was raised
         self.assertTrue(exception_raised)
+
+    async def test_stream_printing_messages_can_yield_speech(self) -> None:
+        """Speech side channel should be exposed only when requested."""
+        agent = SpeechStreamAgent()
+
+        yielded = []
+        async for msg, last, speech in stream_printing_messages(
+            [agent],
+            agent(),
+            yield_speech=True,
+        ):
+            yielded.append((msg, last, speech))
+
+        self.assertEqual(len(yielded), 1)
+        msg, last, speech = yielded[0]
+        self.assertEqual(msg.content, "spoken")
+        self.assertTrue(last)
+        self.assertEqual(speech, agent.speech)

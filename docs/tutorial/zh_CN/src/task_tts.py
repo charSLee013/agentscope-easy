@@ -56,6 +56,7 @@ AgentScope 支持以下 TTS API：
 import asyncio
 import os
 
+from agentscope import _config
 from agentscope.agent import ReActAgent, UserAgent
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg
@@ -176,13 +177,18 @@ asyncio.run(example_non_realtime_tts_streaming())
 #
 # 1. 智能体生成文本响应（可能从 LLM 流式传输）
 # 2. TTS 模型自动将文本合成为音频
-# 3. 合成的音频附加到 ``Msg`` 对象的 ``speech`` 字段
-# 4. 音频在智能体的 ``self.print()`` 方法期间播放
+# 3. 合成的音频通过 ``AgentBase.print()`` 与
+#    ``stream_printing_messages(..., yield_speech=True)`` 的 ``speech`` 侧带传递
+# 4. 本地播放默认关闭，只有将 ``_config.audio_playback_enabled`` 设为 ``True``
+#    才会真的在终端侧播放
 #
 
 
 async def example_agent_with_tts() -> None:
     """使用带 TTS 的 ReActAgent 的示例。"""
+    # AgentScope 默认不播放音频；只有确实需要本地播放时才显式打开。
+    _config.audio_playback_enabled = True
+
     # 创建启用了 TTS 的智能体
     agent = ReActAgent(
         name="Assistant",
@@ -227,4 +233,6 @@ async def example_agent_with_tts() -> None:
 # - :ref:`agent` - 了解更多关于 AgentScope 中的智能体
 # - :ref:`message` - 理解 AgentScope 中的消息格式
 # - API 参考：:class:`agentscope.tts.TTSModelBase`
+# - 如果只想把合成出的音频块转发到自定义通道，而不是本地播放，请保持
+#   ``_config.audio_playback_enabled = False``
 #

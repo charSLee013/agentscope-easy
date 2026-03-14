@@ -5,76 +5,80 @@
 Long-Term Memory
 ========================
 
-In AgentScope, we provide a basic class for long-term memory (``LongTermMemoryBase``) and an implementation based on the `mem0 <https://github.com/mem0ai/mem0>`_ library (``Mem0LongTermMemory``).
-Together with the design of ``ReActAgent`` class in :ref:`agent` section, we provide two long-term memory modes:
+AgentScope provides the abstract ``LongTermMemoryBase`` together with
+ReMe-backed implementations for personal, task, and tool memories.
+ReMe is the primary long-term memory path on ``easy``.
 
-- ``agent_control``: the agent autonomously manages long-term memory by tool calls, and
-- ``static_control``: the developer explicitly controls long-term memory operations.
+Together with :ref:`agent`, AgentScope supports two long-term memory modes:
 
-Developers can also use the ``both`` mode, which activates both memory management modes.
+- ``agent_control``: the agent manages long-term memory via tool calls
+- ``static_control``: the developer explicitly records and retrieves memory
 
-.. hint:: These memory modes are suitable for different usage scenarios. Developers can choose the appropriate mode based on their needs.
+Developers can also use ``both`` to combine the two modes.
 
-Using mem0 Long-Term Memory
+.. hint:: ReMe memories require ``reme-ai`` and must be started with
+   ``async with`` before calling ``record``/``retrieve`` or the tool-facing
+   helper methods.
+
+Using ReMe Personal Memory
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. note:: We provide an example of using mem0 long-term memory in the GitHub repository under the ``examples/long_term_memory/mem0`` directory.
-
 """
 
-import os
 import asyncio
+import os
 
-from agentscope.message import Msg
-from agentscope.memory import InMemoryMemory
 from agentscope.agent import ReActAgent
+from agentscope.embedding import DashScopeTextEmbedding
 from agentscope.formatter import DashScopeChatFormatter
+from agentscope.memory import InMemoryMemory, ReMePersonalLongTermMemory
+from agentscope.message import Msg
 from agentscope.model import DashScopeChatModel
 from agentscope.tool import Toolkit
 
 
-# Create mem0 long-term memory instance
-from agentscope.memory import Mem0LongTermMemory
-from agentscope.embedding import DashScopeTextEmbedding
+def build_long_term_memory() -> ReMePersonalLongTermMemory:
+    """Build a ReMe personal memory instance."""
+    return ReMePersonalLongTermMemory(
+        agent_name="Friday",
+        user_name="user_123",
+        model=DashScopeChatModel(
+            model_name="qwen-max-latest",
+            api_key=os.environ.get("DASHSCOPE_API_KEY"),
+            stream=False,
+        ),
+        embedding_model=DashScopeTextEmbedding(
+            model_name="text-embedding-v2",
+            api_key=os.environ.get("DASHSCOPE_API_KEY"),
+        ),
+    )
 
-
-long_term_memory = Mem0LongTermMemory(
-    agent_name="Friday",
-    user_name="user_123",
-    model=DashScopeChatModel(
-        model_name="qwen-max-latest",
-        api_key=os.environ.get("DASHSCOPE_API_KEY"),
-        stream=False,
-    ),
-    embedding_model=DashScopeTextEmbedding(
-        model_name="text-embedding-v2",
-        api_key=os.environ.get("DASHSCOPE_API_KEY"),
-    ),
-    on_disk=False,
-)
 
 # %%
-# The ``Mem0LongTermMemory`` class provides two main methods for long-term memory operations:
-# ``record`` and ``retrieve``.
-# They take a list of messages as input and record/retrieve information from long-term memory.
+# ``ReMePersonalLongTermMemory`` provides the same high-level
+# ``record`` and ``retrieve`` developer APIs, but runs on top of a started
+# ReMe app context.
 #
-# As an example, we first store a user preference and then retrieve related information from long-term memory.
-#
+# In the example below, we first store a user preference and then retrieve
+# relevant personal memory.
 
 
-# Basic usage example
-async def basic_usage():
-    """Basic usage example"""
-    # Record memory
-    await long_term_memory.record(
-        [Msg("user", "I like staying in homestays", "user")],
-    )
+async def basic_usage() -> None:
+    """Basic usage example."""
+    async with build_long_term_memory() as long_term_memory:
+        await long_term_memory.record(
+            [
+                Msg(
+                    "user",
+                    "I prefer staying in homestays in Hangzhou.",
+                    "user",
+                ),
+            ],
+        )
 
-    # Retrieve memory
-    results = await long_term_memory.retrieve(
-        [Msg("user", "My accommodation preferences", "user")],
-    )
-    print(f"Retrieval results: {results}")
+        results = await long_term_memory.retrieve(
+            Msg("user", "What kind of accommodation do I like?", "user"),
+        )
+        print(f"Retrieval results: {results}")
 
 
 asyncio.run(basic_usage())
@@ -82,92 +86,76 @@ asyncio.run(basic_usage())
 # %%
 # Integration with ReAct Agent
 # ----------------------------------------
-# In AgentScope, the ``ReActAgent`` class receives a ``long_term_memory``
-# parameter in its constructor, as well as a ``long_term_memory_mode`` parameter
-# that specifies the long-term memory mode.
+# ``ReActAgent`` accepts both ``long_term_memory`` and
+# ``long_term_memory_mode``.
 #
-# If ``long_term_memory_mode`` is set to ``agent_control`` or ``both``, two
-# tool functions ``record_to_memory`` and ``retrieve_from_memory`` will be
-# registered in the agent's toolkit, allowing the agent to autonomously
-# manage long-term memory through tool calls.
+# If ``long_term_memory_mode`` is ``agent_control`` or ``both``, the agent
+# exposes ``record_to_memory`` and ``retrieve_from_memory`` as toolkit tools.
 #
-# .. note:: To achieve the best results, the ``"agent_control"`` mode may require
-#  additional instructions in the system prompt.
-#
-
-# Create ReAct agent with long-term memory
-agent = ReActAgent(
-    name="Friday",
-    sys_prompt="You are an assistant with long-term memory capabilities.",
-    model=DashScopeChatModel(
-        api_key=os.environ.get("DASHSCOPE_API_KEY"),
-        model_name="qwen-max-latest",
-    ),
-    formatter=DashScopeChatFormatter(),
-    toolkit=Toolkit(),
-    memory=InMemoryMemory(),
-    long_term_memory=long_term_memory,
-    long_term_memory_mode="static_control",  # Use static_control mode
-)
+# In ``static_control`` mode, AgentScope retrieves relevant memories before
+# each reply and records the final reply after the turn finishes.
 
 
-async def record_preferences():
-    """ReAct agent integration example"""
-    # Conversation example
-    msg = Msg(
-        "user",
-        "When I travel to Hangzhou, I like staying in homestays",
-        "user",
-    )
-    await agent(msg)
+async def react_agent_integration() -> None:
+    """Use ReMe personal memory with ReActAgent."""
+    async with build_long_term_memory() as long_term_memory:
+        agent = ReActAgent(
+            name="Friday",
+            sys_prompt="You are an assistant with long-term memory.",
+            model=DashScopeChatModel(
+                api_key=os.environ.get("DASHSCOPE_API_KEY"),
+                model_name="qwen-max-latest",
+            ),
+            formatter=DashScopeChatFormatter(),
+            toolkit=Toolkit(),
+            memory=InMemoryMemory(),
+            long_term_memory=long_term_memory,
+            long_term_memory_mode="static_control",
+        )
+
+        await agent(
+            Msg(
+                "user",
+                "When I travel to Hangzhou, I usually prefer homestays.",
+                "user",
+            ),
+        )
+
+        await agent.memory.clear()
+        await agent(
+            Msg(
+                "user",
+                "What accommodation do I usually prefer? Answer briefly.",
+                "user",
+            ),
+        )
 
 
-asyncio.run(record_preferences())
+asyncio.run(react_agent_integration())
 
 # %%
-# Then we clear the short-term memory and ask the agent about the user's preferences.
-#
-
-
-async def retrieve_preferences():
-    """Retrieve user preferences from long-term memory"""
-    # Clear short-term memory
-    await agent.memory.clear()
-    # The agent will remember previous conversations
-    msg2 = Msg("user", "What are my preferences? Answer briefly.", "user")
-    await agent(msg2)
-
-
-asyncio.run(retrieve_preferences())
-
-
-# %%
-# Customizing Long-Term Memory
+# Choosing the Right ReMe Memory
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# AgentScope provides the ``LongTermMemoryBase`` base class, which defines the basic
+# AgentScope currently provides three ReMe implementations:
 #
-# Developers can inherit from ``LongTermMemoryBase`` to implement custom long-term
-# memory systems according to their needs：
-#
-# .. list-table:: Long-term memory classes in AgentScope
+# .. list-table:: ReMe long-term memory classes in AgentScope
 #     :header-rows: 1
 #
 #     * - Class
-#       - Abstract Methods
-#       - Description
-#     * - ``LongTermMemoryBase``
-#       - | ``record``
-#         | ``retrieve``
-#         | ``record_to_memory``
-#         | ``retrieve_from_memory``
-#       - - For ``"static_control"`` mode, you must implement the ``record`` and ``retrieve`` methods.
-#         - For ``"agent_control"`` mode, the ``record_to_memory`` and ``retrieve_from_memory`` methods must be implemented.
-#     * - ``Mem0LongTermMemory``
-#       - \-
-#       - Long-term memory implementation based on the mem0 library, supporting vector storage and retrieval.
+#       - Focus
+#       - Notes
+#     * - ``ReMePersonalLongTermMemory``
+#       - User preferences, habits, and personal facts
+#       - Best when the agent should remember stable user-specific information
+#     * - ``ReMeTaskLongTermMemory``
+#       - Task experience and execution trajectories
+#       - Supports ``score`` to indicate trajectory quality
+#     * - ``ReMeToolLongTermMemory``
+#       - Tool execution results and reusable tool guidance
+#       - Works best with JSON tool-call records
 #
-#
-#
+# Developers can still inherit from ``LongTermMemoryBase`` to build custom
+# long-term memory systems when the built-in ReMe variants are not enough.
 #
 # Further Reading
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -58,6 +58,7 @@ AgentScope supports the following TTS APIs:
 import asyncio
 import os
 
+from agentscope import _config
 from agentscope.agent import ReActAgent, UserAgent
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg
@@ -188,13 +189,19 @@ asyncio.run(example_non_realtime_tts_streaming())
 #
 # 1. The agent generates a text response (potentially streamed from an LLM)
 # 2. The TTS model synthesizes the text to audio automatically
-# 3. The synthesized audio is attached to the ``speech`` field of the ``Msg`` object
-# 4. The audio is played during the agent's ``self.print()`` method
+# 3. The synthesized audio is passed through the ``speech`` side channel of
+#    ``AgentBase.print()`` and ``stream_printing_messages(..., yield_speech=True)``
+# 4. Local playback stays disabled unless ``_config.audio_playback_enabled``
+#    is set to ``True``
 #
 
 
 async def example_agent_with_tts() -> None:
     """An example of using TTS with ReActAgent."""
+    # Playback is default-off in AgentScope. Turn it on explicitly only when
+    # you really want local audio output from the terminal session.
+    _config.audio_playback_enabled = True
+
     # Create an agent with TTS enabled
     agent = ReActAgent(
         name="Assistant",
@@ -240,4 +247,6 @@ async def example_agent_with_tts() -> None:
 # - :ref:`agent` - Learn more about agents in AgentScope
 # - :ref:`message` - Understand message format in AgentScope
 # - API Reference: :class:`agentscope.tts.TTSModelBase`
+# - Keep ``_config.audio_playback_enabled`` as ``False`` when you only need
+#   the synthesized audio blocks for custom transport instead of local playback
 #

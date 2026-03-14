@@ -120,19 +120,20 @@ class Msg:
         """
         return len(self.get_content_blocks(block_type)) > 0
 
-    def get_text_content(self) -> str | None:
+    def get_text_content(self, separator: str = "\n") -> str | None:
         """Get the pure text blocks from the message content."""
         if isinstance(self.content, str):
             return self.content
 
-        gathered_text = None
+        gathered_text = []
         for block in self.content:
             if block.get("type") == "text":
-                if gathered_text is None:
-                    gathered_text = str(block.get("text"))
-                else:
-                    gathered_text += block.get("text")
-        return gathered_text
+                gathered_text.append(str(block.get("text", "")))
+
+        if not gathered_text:
+            return None
+
+        return separator.join(gathered_text)
 
     @overload
     def get_content_blocks(

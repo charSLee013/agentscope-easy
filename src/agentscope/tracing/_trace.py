@@ -15,11 +15,29 @@ from typing import (
 
 import aioitertools
 
-from ._attributes import _serialize_to_str
+from ._attributes import (
+    SpanAttributes as GenAISpanAttributes,
+    _serialize_to_str,
+)
+from ._extractor import (
+    _get_agent_request_attributes,
+    _get_agent_response_attributes,
+    _get_embedding_request_attributes,
+    _get_embedding_response_attributes,
+    _get_formatter_request_attributes,
+    _get_formatter_response_attributes,
+    _get_generic_function_request_attributes,
+    _get_generic_function_response_attributes,
+    _get_llm_request_attributes,
+    _get_llm_response_attributes,
+    _get_tool_request_attributes,
+    _get_tool_response_attributes,
+)
+from ._setup import _get_tracer
 from .. import _config
 from ..embedding._embedding_base import EmbeddingModelBase
 from .._logging import logger
-from ._types import SpanKind, SpanAttributes
+from ._types import SpanKind, SpanAttributes as LegacySpanAttributes
 
 if TYPE_CHECKING:
     from ..agent import AgentBase
@@ -60,13 +78,74 @@ def _check_tracing_enabled() -> bool:
     return _config.trace_enabled
 
 
+def _clean_attributes(attributes: dict[str, Any]) -> dict[str, Any]:
+    """Drop None values before passing attributes to OpenTelemetry."""
+    return {
+        key: value for key, value in attributes.items() if value is not None
+    }
+
+
+def _merge_attributes(*attribute_groups: dict[str, Any]) -> dict[str, Any]:
+    """Merge multiple attribute dictionaries and drop None values."""
+    merged: dict[str, Any] = {}
+    for group in attribute_groups:
+        merged.update(group)
+    return _clean_attributes(merged)
+
+
+def _legacy_attributes(
+    span_kind: SpanKind,
+    input_payload: Any,
+    meta_payload: Any,
+) -> dict[str, str]:
+    """Build legacy tracing attributes used by evaluation stats."""
+    return {
+        LegacySpanAttributes.SPAN_KIND: _serialize_to_str(span_kind),
+        LegacySpanAttributes.PROJECT_RUN_ID: _serialize_to_str(
+            _config.run_id,
+        ),
+        LegacySpanAttributes.INPUT: _serialize_to_str(input_payload),
+        LegacySpanAttributes.META: _serialize_to_str(meta_payload),
+    }
+
+
+def _set_span_success(span: Span) -> None:
+    """Mark a span as successful and close it."""
+    import opentelemetry
+
+    span.set_status(opentelemetry.trace.StatusCode.OK)
+    span.end()
+
+
+def _set_span_error(span: Span, error: Exception) -> None:
+    """Mark a span as failed and close it."""
+    import opentelemetry
+
+    span.set_status(opentelemetry.trace.StatusCode.ERROR, str(error))
+    span.record_exception(error)
+    span.end()
+
+
+def _stream_response_attributes(span: Span, chunk: Any) -> dict[str, Any]:
+    """Infer response attributes for streaming spans by legacy span kind."""
+    span_kind = getattr(span, "attributes", {}).get(
+        LegacySpanAttributes.SPAN_KIND,
+    )
+
+    if span_kind == SpanKind.LLM.value:
+        return _get_llm_response_attributes(chunk)
+
+    if span_kind == SpanKind.TOOL.value:
+        return _get_tool_response_attributes(chunk)
+
+    return _get_generic_function_response_attributes(chunk)
+
+
 def _trace_sync_generator_wrapper(
     res: Generator[T, None, None],
     span: Span,
 ) -> Generator[T, None, None]:
     """Trace the sync generator output with OpenTelemetry."""
-
-    import opentelemetry
 
     has_error = False
 
@@ -77,20 +156,23 @@ def _trace_sync_generator_wrapper(
             yield chunk
     except Exception as e:
         has_error = True
-        span.set_status(opentelemetry.trace.StatusCode.ERROR, str(e))
-        span.record_exception(e)
+        _set_span_error(span, e)
         raise e from None
 
     finally:
         if not has_error:
             # Set the last chunk as output
             span.set_attributes(
-                {
-                    SpanAttributes.OUTPUT: _serialize_to_str(last_chunk),
-                },
+                _merge_attributes(
+                    {
+                        LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                            last_chunk,
+                        ),
+                    },
+                    _stream_response_attributes(span, last_chunk),
+                ),
             )
-            span.set_status(opentelemetry.trace.StatusCode.OK)
-        span.end()
+            _set_span_success(span)
 
 
 async def _trace_async_generator_wrapper(
@@ -109,8 +191,6 @@ async def _trace_async_generator_wrapper(
         `T`:
             The output of the async generator.
     """
-    import opentelemetry
-
     has_error = False
 
     try:
@@ -121,20 +201,23 @@ async def _trace_async_generator_wrapper(
 
     except Exception as e:
         has_error = True
-        span.set_status(opentelemetry.trace.StatusCode.ERROR, str(e))
-        span.record_exception(e)
+        _set_span_error(span, e)
         raise e from None
 
     finally:
         if not has_error:
             # Set the last chunk as output
             span.set_attributes(
-                {
-                    SpanAttributes.OUTPUT: _serialize_to_str(last_chunk),
-                },
+                _merge_attributes(
+                    {
+                        LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                            last_chunk,
+                        ),
+                    },
+                    _stream_response_attributes(span, last_chunk),
+                ),
             )
-            span.set_status(opentelemetry.trace.StatusCode.OK)
-        span.end()
+            _set_span_success(span)
 
 
 def trace(
@@ -179,23 +262,22 @@ def trace(
                 if not _check_tracing_enabled():
                     return await func(*args, **kwargs)
 
-                import opentelemetry
-
-                tracer = opentelemetry.trace.get_tracer(__name__)
-
-                attributes = {
-                    SpanAttributes.SPAN_KIND: SpanKind.COMMON,
-                    SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(
-                        _config.run_id,
-                    ),
-                    SpanAttributes.INPUT: _serialize_to_str(
+                tracer = _get_tracer()
+                attributes = _merge_attributes(
+                    _legacy_attributes(
+                        SpanKind.COMMON,
                         {
                             "args": args,
                             "kwargs": kwargs,
                         },
+                        {},
                     ),
-                    SpanAttributes.META: _serialize_to_str({}),
-                }
+                    _get_generic_function_request_attributes(
+                        name,
+                        args,
+                        kwargs,
+                    ),
+                )
 
                 with tracer.start_as_current_span(
                     name=name,
@@ -213,19 +295,20 @@ def trace(
 
                         # non-generator result
                         span.set_attributes(
-                            {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                            _merge_attributes(
+                                {
+                                    LegacySpanAttributes.OUTPUT: (
+                                        _serialize_to_str(res)
+                                    ),
+                                },
+                                _get_generic_function_response_attributes(res),
+                            ),
                         )
-                        span.set_status(opentelemetry.trace.StatusCode.OK)
-                        span.end()
+                        _set_span_success(span)
                         return res
 
                     except Exception as e:
-                        span.set_status(
-                            opentelemetry.trace.StatusCode.ERROR,
-                            str(e),
-                        )
-                        span.record_exception(e)
-                        span.end()
+                        _set_span_error(span, e)
                         raise e from None
 
             return wrapper
@@ -240,23 +323,22 @@ def trace(
             if not _check_tracing_enabled():
                 return func(*args, **kwargs)
 
-            import opentelemetry
-
-            tracer = opentelemetry.trace.get_tracer(__name__)
-
-            attributes = {
-                SpanAttributes.SPAN_KIND: SpanKind.COMMON,
-                SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(
-                    _config.run_id,
-                ),
-                SpanAttributes.INPUT: _serialize_to_str(
+            tracer = _get_tracer()
+            attributes = _merge_attributes(
+                _legacy_attributes(
+                    SpanKind.COMMON,
                     {
                         "args": args,
                         "kwargs": kwargs,
                     },
+                    {},
                 ),
-                SpanAttributes.META: _serialize_to_str({}),
-            }
+                _get_generic_function_request_attributes(
+                    name,
+                    args,
+                    kwargs,
+                ),
+            )
 
             with tracer.start_as_current_span(
                 name=name,
@@ -274,19 +356,20 @@ def trace(
 
                     # non-generator result
                     span.set_attributes(
-                        {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                        _merge_attributes(
+                            {
+                                LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                                    res,
+                                ),
+                            },
+                            _get_generic_function_response_attributes(res),
+                        ),
                     )
-                    span.set_status(opentelemetry.trace.StatusCode.OK)
-                    span.end()
+                    _set_span_success(span)
                     return res
 
                 except Exception as e:
-                    span.set_status(
-                        opentelemetry.trace.StatusCode.ERROR,
-                        str(e),
-                    )
-                    span.record_exception(e)
-                    span.end()
+                    _set_span_error(span, e)
                     raise e from None
 
         return sync_wrapper
@@ -312,25 +395,20 @@ def trace_toolkit(
         if not _check_tracing_enabled():
             return await func(self, tool_call=tool_call)
 
-        import opentelemetry
-
-        tracer = opentelemetry.trace.get_tracer(__name__)
-
-        # Prepare the attributes for the span
-        attributes = {
-            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.TOOL),
-            SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(_config.run_id),
-            SpanAttributes.INPUT: _serialize_to_str(
-                {
-                    "tool_call": tool_call,
-                },
+        tracer = _get_tracer()
+        attributes = _merge_attributes(
+            _legacy_attributes(
+                SpanKind.TOOL,
+                {"tool_call": tool_call},
+                {**tool_call},
             ),
-            SpanAttributes.META: _serialize_to_str(
-                {
-                    **tool_call,
-                },
-            ),
-        }
+            _get_tool_request_attributes(self, tool_call),
+            {
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME: (
+                    f"{self.__class__.__name__}.{func.__name__}"
+                ),
+            },
+        )
 
         with tracer.start_as_current_span(
             f"{func.__name__}",
@@ -345,12 +423,7 @@ def trace_toolkit(
                 return _trace_async_generator_wrapper(res, span)
 
             except Exception as e:
-                span.set_status(
-                    opentelemetry.trace.StatusCode.ERROR,
-                    str(e),
-                )
-                span.record_exception(e)
-                span.end()
+                _set_span_error(span, e)
                 raise e from None
 
     return wrapper
@@ -392,28 +465,27 @@ def trace_reply(
             )
             return await func(self, *args, **kwargs)
 
-        import opentelemetry
-
-        tracer = opentelemetry.trace.get_tracer(__name__)
-
-        # Prepare the attributes for the span
         agent_name = self.name if hasattr(self, "name") else None
-        attributes = {
-            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.AGENT),
-            SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(_config.run_id),
-            SpanAttributes.INPUT: _serialize_to_str(
+        tracer = _get_tracer()
+        attributes = _merge_attributes(
+            _legacy_attributes(
+                SpanKind.AGENT,
                 {
                     "args": args,
                     "kwargs": kwargs,
                 },
-            ),
-            SpanAttributes.META: _serialize_to_str(
                 {
                     "id": self.id,
                     "name": agent_name,
                 },
             ),
-        }
+            _get_agent_request_attributes(self, args, kwargs),
+            {
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME: (
+                    f"{self.__class__.__name__}.{func.__name__}"
+                ),
+            },
+        )
 
         with tracer.start_as_current_span(
             f"{self.__class__.__name__}.{func.__name__}",
@@ -426,19 +498,20 @@ def trace_reply(
 
                 # Set the output attribute
                 span.set_attributes(
-                    {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                    _merge_attributes(
+                        {
+                            LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                                res,
+                            ),
+                        },
+                        _get_agent_response_attributes(res),
+                    ),
                 )
-                span.set_status(opentelemetry.trace.StatusCode.OK)
-                span.end()
+                _set_span_success(span)
                 return res
 
             except Exception as e:
-                span.set_status(
-                    opentelemetry.trace.StatusCode.ERROR,
-                    str(e),
-                )
-                span.record_exception(e)
-                span.end()
+                _set_span_error(span, e)
                 raise e from None
 
     return wrapper
@@ -468,26 +541,25 @@ def trace_embedding(
             )
             return await func(self, *args, **kwargs)
 
-        import opentelemetry
-
-        tracer = opentelemetry.trace.get_tracer(__name__)
-
-        # Prepare the attributes for the span
-        attributes = {
-            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.EMBEDDING),
-            SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(_config.run_id),
-            SpanAttributes.INPUT: _serialize_to_str(
+        tracer = _get_tracer()
+        attributes = _merge_attributes(
+            _legacy_attributes(
+                SpanKind.EMBEDDING,
                 {
                     "args": args,
                     "kwargs": kwargs,
                 },
-            ),
-            SpanAttributes.META: _serialize_to_str(
                 {
                     "model_name": self.model_name,
                 },
             ),
-        }
+            _get_embedding_request_attributes(self, args, kwargs),
+            {
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME: (
+                    f"{self.__class__.__name__}.{func.__name__}"
+                ),
+            },
+        )
 
         with tracer.start_as_current_span(
             f"{self.__class__.__name__}.{func.__name__}",
@@ -500,19 +572,20 @@ def trace_embedding(
 
                 # Set the output attribute
                 span.set_attributes(
-                    {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                    _merge_attributes(
+                        {
+                            LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                                res,
+                            ),
+                        },
+                        _get_embedding_response_attributes(res),
+                    ),
                 )
-                span.set_status(opentelemetry.trace.StatusCode.OK)
-                span.end()
+                _set_span_success(span)
                 return res
 
             except Exception as e:
-                span.set_status(
-                    opentelemetry.trace.StatusCode.ERROR,
-                    str(e),
-                )
-                span.record_exception(e)
-                span.end()
+                _set_span_error(span, e)
                 raise e from None
 
     return wrapper
@@ -554,22 +627,23 @@ def trace_format(
             )
             return await func(self, *args, **kwargs)
 
-        import opentelemetry
-
-        tracer = opentelemetry.trace.get_tracer(__name__)
-
-        # Prepare the attributes for the span
-        attributes = {
-            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.FORMATTER),
-            SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(_config.run_id),
-            SpanAttributes.INPUT: _serialize_to_str(
+        tracer = _get_tracer()
+        attributes = _merge_attributes(
+            _legacy_attributes(
+                SpanKind.FORMATTER,
                 {
                     "args": args,
                     "kwargs": kwargs,
                 },
+                {},
             ),
-            SpanAttributes.META: _serialize_to_str({}),
-        }
+            _get_formatter_request_attributes(self, args, kwargs),
+            {
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME: (
+                    f"{self.__class__.__name__}.{func.__name__}"
+                ),
+            },
+        )
 
         with tracer.start_as_current_span(
             f"{self.__class__.__name__}.{func.__name__}",
@@ -582,19 +656,20 @@ def trace_format(
 
                 # Set the output attribute
                 span.set_attributes(
-                    {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                    _merge_attributes(
+                        {
+                            LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                                res,
+                            ),
+                        },
+                        _get_formatter_response_attributes(res),
+                    ),
                 )
-                span.set_status(opentelemetry.trace.StatusCode.OK)
-                span.end()
+                _set_span_success(span)
                 return res
 
             except Exception as e:
-                span.set_status(
-                    opentelemetry.trace.StatusCode.ERROR,
-                    str(e),
-                )
-                span.record_exception(e)
-                span.end()
+                _set_span_error(span, e)
                 raise e from None
 
     return wrapper
@@ -648,27 +723,26 @@ def trace_llm(
             )
             return await func(self, *args, **kwargs)
 
-        import opentelemetry
-
-        tracer = opentelemetry.trace.get_tracer(__name__)
-
-        # Prepare the attributes for the span
-        attributes = {
-            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.LLM),
-            SpanAttributes.PROJECT_RUN_ID: _serialize_to_str(_config.run_id),
-            SpanAttributes.INPUT: _serialize_to_str(
+        tracer = _get_tracer()
+        attributes = _merge_attributes(
+            _legacy_attributes(
+                SpanKind.LLM,
                 {
                     "args": args,
                     "kwargs": kwargs,
                 },
-            ),
-            SpanAttributes.META: _serialize_to_str(
                 {
                     "model_name": self.model_name,
                     "stream": self.stream,
                 },
             ),
-        }
+            _get_llm_request_attributes(self, args, kwargs),
+            {
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME: (
+                    f"{self.__class__.__name__}.__call__"
+                ),
+            },
+        )
 
         # Begin the llm call span
         with tracer.start_as_current_span(
@@ -686,19 +760,20 @@ def trace_llm(
 
                 # non-generator result
                 span.set_attributes(
-                    {SpanAttributes.OUTPUT: _serialize_to_str(res)},
+                    _merge_attributes(
+                        {
+                            LegacySpanAttributes.OUTPUT: _serialize_to_str(
+                                res,
+                            ),
+                        },
+                        _get_llm_response_attributes(res),
+                    ),
                 )
-                span.set_status(opentelemetry.trace.StatusCode.OK)
-                span.end()
+                _set_span_success(span)
                 return res
 
             except Exception as e:
-                span.set_status(
-                    opentelemetry.trace.StatusCode.ERROR,
-                    str(e),
-                )
-                span.record_exception(e)
-                span.end()
+                _set_span_error(span, e)
                 raise e from None
 
     return async_wrapper
