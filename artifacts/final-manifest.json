@@ -1,0 +1,105 @@
+{
+  "generated_at": "2026-03-15T03:32:05",
+  "target": "/Users/charslee/Repo/private/agentscope-easy",
+  "docs_dir": "/Users/charslee/Repo/private/agentscope-easy/.codex/long-horizon",
+  "working_docs": [
+    {
+      "path": ".codex/long-horizon/Prompt.md",
+      "size_bytes": 4846,
+      "mtime_epoch": 1773515807,
+      "sha256": "1734e8a393e0574404640dd14611f71111f59d0d02458b9a66420baa9c9e643f"
+    },
+    {
+      "path": ".codex/long-horizon/Plan.md",
+      "size_bytes": 7590,
+      "mtime_epoch": 1773516586,
+      "sha256": "d8a59896f38270ec8c8cf65d09f4ab974d6b5ebcac1fc43c6362ff33185a2e7a"
+    },
+    {
+      "path": ".codex/long-horizon/Implement.md",
+      "size_bytes": 1851,
+      "mtime_epoch": 1773421305,
+      "sha256": "2a824420a2dc17cce3183524cd46401864b3557c9450fc45e037c1b05a398d0c"
+    },
+    {
+      "path": ".codex/long-horizon/Documentation.md",
+      "size_bytes": 15663,
+      "mtime_epoch": 1773516700,
+      "sha256": "d4d93af5b2776788deb9c3488091f5eaaedb79cba004e7add55e90800a072451"
+    }
+  ],
+  "required_paths": [
+    {
+      "path": ".codex/long-horizon/source-matrix.md",
+      "size_bytes": 14334,
+      "mtime_epoch": 1773516586,
+      "sha256": "fcbaaec057ba572a7975da8d85bce23e8f550902cf867536e8c9ef55e134598f"
+    },
+    {
+      "path": ".codex/long-horizon/Prompt.md",
+      "size_bytes": 4846,
+      "mtime_epoch": 1773515807,
+      "sha256": "1734e8a393e0574404640dd14611f71111f59d0d02458b9a66420baa9c9e643f"
+    },
+    {
+      "path": ".codex/long-horizon/Plan.md",
+      "size_bytes": 7590,
+      "mtime_epoch": 1773516586,
+      "sha256": "d8a59896f38270ec8c8cf65d09f4ab974d6b5ebcac1fc43c6362ff33185a2e7a"
+    },
+    {
+      "path": ".codex/long-horizon/Implement.md",
+      "size_bytes": 1851,
+      "mtime_epoch": 1773421305,
+      "sha256": "2a824420a2dc17cce3183524cd46401864b3557c9450fc45e037c1b05a398d0c"
+    },
+    {
+      "path": ".codex/long-horizon/Documentation.md",
+      "size_bytes": 15663,
+      "mtime_epoch": 1773516700,
+      "sha256": "d4d93af5b2776788deb9c3488091f5eaaedb79cba004e7add55e90800a072451"
+    },
+    {
+      "path": "src/agentscope/_run_config.py",
+      "size_bytes": 2650,
+      "mtime_epoch": 1773504166,
+      "sha256": "fd812d500fe9d082c672ca2cfe95d200a1326414bf1ef2307849aa67d6209bf7"
+    },
+    {
+      "path": "src/agentscope/tts/__init__.py",
+      "size_bytes": 534,
+      "mtime_epoch": 1773509429,
+      "sha256": "c032d35e27dc855406d1202eebd0edf929e4e2c1d0596fb1e1c7a48bb1e09631"
+    },
+    {
+      "path": "src/agentscope/memory/_reme/__init__.py",
+      "size_bytes": 379,
+      "mtime_epoch": 1773506403,
+      "sha256": "34013934a881663f7fc65ad4da20b1c8975e17e780a1eff285d4d0ceb294f5e7"
+    },
+    {
+      "path": "src/agentscope/tune/__init__.py",
+      "size_bytes": 181,
+      "mtime_epoch": 1773516002,
+      "sha256": "9040afc2462e275e25b958991ede817c3a6b202600ccc15c0c6a14c5d3942e1d"
+    },
+    {
+      "path": "src/agentscope/model/_trinity_model.py",
+      "size_bytes": 2234,
+      "mtime_epoch": 1773516138,
+      "sha256": "c9a619cafc9e458d77b7177e76cfcbef72bfb211dace0c6f9bed5d214b1a7b4c"
+    },
+    {
+      "path": "docs/tune/SOP.md",
+      "size_bytes": 4146,
+      "mtime_epoch": 1773516123,
+      "sha256": "e527ce0f24e7e55bc9a29c5057bc1e1abbaad7d40412024d555d619baec08683"
+    },
+    {
+      "path": "examples/training/react_agent/main.py",
+      "size_bytes": 2421,
+      "mtime_epoch": 1773516002,
+      "sha256": "541344e69095a9cee2f4cb2e9b637a4bbc8b4405e8d0c6c97ca793012db4acc8"
+    }
+  ]
+}
