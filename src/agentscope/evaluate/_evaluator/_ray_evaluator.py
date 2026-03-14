@@ -4,6 +4,7 @@ import asyncio
 import platform
 from typing import Callable, Awaitable, Coroutine, Any
 
+from ._in_memory_exporter import _InMemoryExporter
 from .._benchmark_base import BenchmarkBase
 from .._evaluator._evaluator_base import EvaluatorBase
 from .._solution import SolutionOutput
@@ -88,6 +89,17 @@ class RaySolutionActor:
             max_concurrency=n_workers,
         ).remote()
         # pylint: enable=E1101
+        self.exporter = _InMemoryExporter()
+
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+        tracer_provider = trace.get_tracer_provider()
+        if not isinstance(tracer_provider, TracerProvider):
+            tracer_provider = TracerProvider()
+            trace.set_tracer_provider(tracer_provider)
+        tracer_provider.add_span_processor(SimpleSpanProcessor(self.exporter))
 
     async def run(
         self,
@@ -117,13 +129,44 @@ class RaySolutionActor:
             )
 
         else:
-            # Run the solution
-            solution_result = await solution(
-                task,
-                storage.get_agent_pre_print_hook(
-                    task.id,
+            from opentelemetry import baggage, trace
+            from opentelemetry.context import attach, detach
+
+            tracer = trace.get_tracer(__name__)
+            token = attach(
+                baggage.set_baggage(
+                    "repeat_id",
                     repeat_id,
+                    context=baggage.set_baggage("task_id", task.id),
                 ),
+            )
+            trace_enabled_before = False
+            try:
+                with tracer.start_as_current_span(
+                    name=f"Solution_{task.id}_{repeat_id}",
+                ):
+                    from ... import _config
+
+                    trace_enabled_before = _config.trace_enabled
+                    _config.trace_enabled = True
+                    solution_result = await solution(
+                        task,
+                        storage.get_agent_pre_print_hook(
+                            task.id,
+                            repeat_id,
+                        ),
+                    )
+            finally:
+                from ... import _config
+
+                _config.trace_enabled = trace_enabled_before
+                trace.get_tracer_provider().force_flush()
+                detach(token)
+
+            storage.save_solution_stats(
+                task.id,
+                repeat_id,
+                self.exporter.cnt.get(task.id, {}).get(repeat_id, {}),
             )
 
             storage.save_solution_result(
@@ -211,8 +254,9 @@ class RayEvaluator(EvaluatorBase):
             max_concurrency=self.n_workers,
         ).remote(n_workers=self.n_workers)
         # pylint: enable=E1101
-        for repeat_id in range(self.n_repeat):
-            for task in self.benchmark:
+        for task in self.benchmark:
+            await self._save_task_meta(task)
+            for repeat_id in range(self.n_repeat):
                 futures.append(
                     solution_actor.run.remote(
                         self.storage,

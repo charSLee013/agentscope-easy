@@ -7,6 +7,7 @@ from typing import Any, Callable
 from .._metric_base import MetricResult
 from .._solution import SolutionOutput
 from ...agent import AgentBase
+from ...types import JSONSerializableObject
 
 
 class EvaluatorStorageBase:
@@ -170,6 +171,31 @@ class EvaluatorStorageBase:
             meta_info (`dict`):
                 A dictionary containing the meta information.
         """
+
+    @abstractmethod
+    def save_task_meta(
+        self,
+        task_id: str,
+        meta_info: dict[str, JSONSerializableObject],
+    ) -> None:
+        """Save the task meta information."""
+
+    @abstractmethod
+    def save_solution_stats(
+        self,
+        task_id: str,
+        repeat_id: str,
+        stats: dict,
+    ) -> None:
+        """Save the per-solution statistics."""
+
+    @abstractmethod
+    def get_solution_stats(
+        self,
+        task_id: str,
+        repeat_id: str,
+    ) -> dict:
+        """Load the per-solution statistics."""
 
     @abstractmethod
     def get_agent_pre_print_hook(

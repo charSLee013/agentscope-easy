@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Evaluation module tests in agentscope."""
+import json
 import os
 import sys
 import shutil
@@ -10,6 +11,8 @@ import ray
 
 from agentscope.agent import AgentBase
 from agentscope.message import Msg
+from agentscope.tracing._attributes import _serialize_to_str
+from agentscope.tracing._types import SpanAttributes, SpanKind
 from agentscope.evaluate import (
     SolutionOutput,
     MetricBase,
@@ -164,10 +167,53 @@ async def dummy_solution_generation(
     pre_hook: Callable,  # pylint: disable=W0613
 ) -> SolutionOutput:
     """Solution generation function for test"""
+    from opentelemetry import trace
+
     agent = EvalTestAgent()
 
     msg_input = Msg("user", task.input, role="user")
     res = await agent(msg_input)
+
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span(
+        "DummyAgent",
+        attributes={
+            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.AGENT),
+            SpanAttributes.META: _serialize_to_str(
+                {
+                    "id": "eval-test-agent",
+                    "name": "test_eval_agent",
+                },
+            ),
+        },
+    ):
+        pass
+
+    with tracer.start_as_current_span(
+        "DummyLLM",
+        attributes={
+            SpanAttributes.SPAN_KIND: _serialize_to_str(SpanKind.LLM),
+            SpanAttributes.META: _serialize_to_str(
+                {
+                    "model_name": "dummy-model",
+                    "stream": False,
+                },
+            ),
+        },
+    ) as span:
+        span.set_attributes(
+            {
+                SpanAttributes.OUTPUT: _serialize_to_str(
+                    {
+                        "usage": {
+                            "input_tokens": 3,
+                            "output_tokens": 5,
+                        },
+                    },
+                ),
+            },
+        )
+
     return SolutionOutput(
         success=True,
         output=res.metadata.get("answer_as_number", None),
@@ -177,6 +223,55 @@ async def dummy_solution_generation(
 
 class EvaluatorTest(IsolatedAsyncioTestCase):
     """Test for evaluators in AS"""
+
+    def _assert_stats_artifacts(self, save_dir: str) -> None:
+        """Assert task meta, per-solution stats, and aggregation artifacts."""
+        for task_id in (TASK_ID_1, TASK_ID_2):
+            task_meta_path = os.path.join(save_dir, task_id, "task_meta.json")
+            self.assertTrue(os.path.exists(task_meta_path))
+            with open(task_meta_path, "r", encoding="utf-8") as f:
+                task_meta = json.load(f)
+            self.assertEqual(task_meta["id"], task_id)
+            self.assertIn("metrics", task_meta)
+
+            stats_path = os.path.join(save_dir, "0", task_id, "stats.json")
+            self.assertTrue(os.path.exists(stats_path))
+            with open(stats_path, "r", encoding="utf-8") as f:
+                stats = json.load(f)
+            self.assertIn("agent", stats)
+            self.assertGreaterEqual(stats["agent"], 1)
+            self.assertEqual(stats["llm"]["dummy-model"], 1)
+            self.assertEqual(
+                stats["chat_usage"]["dummy-model"]["input_tokens"],
+                3,
+            )
+            self.assertEqual(
+                stats["chat_usage"]["dummy-model"]["output_tokens"],
+                5,
+            )
+
+        aggregation_path = os.path.join(save_dir, "evaluation_result.json")
+        self.assertTrue(os.path.exists(aggregation_path))
+        with open(aggregation_path, "r", encoding="utf-8") as f:
+            aggregation = json.load(f)
+        self.assertIn("total_stats", aggregation)
+        self.assertIn("stats", aggregation["repeats"]["0"])
+        self.assertGreaterEqual(
+            aggregation["total_stats"]["agent"],
+            len(TOY_BENCHMARK),
+        )
+        self.assertEqual(
+            aggregation["total_stats"]["chat_usage"]["dummy-model"][
+                "input_tokens"
+            ],
+            6,
+        )
+        self.assertEqual(
+            aggregation["total_stats"]["chat_usage"]["dummy-model"][
+                "output_tokens"
+            ],
+            10,
+        )
 
     async def asyncSetUp(self) -> None:
         """Set up the test environment."""
@@ -244,6 +339,7 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
             metric_result_2.result,
             0.0,
         )
+        self._assert_stats_artifacts(self.file_storage_general.save_dir)
 
     async def test_ray_evaluator(self) -> None:
         """Test ray evaluator."""
@@ -283,6 +379,7 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
             metric_result_2.result,
             0.0,
         )
+        self._assert_stats_artifacts(self.file_storage_ray.save_dir)
 
     async def test_ray_evaluator_rejects_native_windows(self) -> None:
         """Test RayEvaluator rejects native Windows at runtime."""

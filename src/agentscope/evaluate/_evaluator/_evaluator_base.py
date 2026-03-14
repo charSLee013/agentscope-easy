@@ -3,6 +3,8 @@
 import collections
 import json
 from abc import abstractmethod
+from collections import defaultdict
+from dataclasses import asdict
 from typing import Callable, Coroutine, Any
 
 from .._solution import SolutionOutput
@@ -76,11 +78,32 @@ class EvaluatorBase:
             },
         )
 
+    async def _save_task_meta(self, task: Task) -> None:
+        """Persist task metadata in a JSON-serializable form."""
+        meta_info = asdict(task)
+        meta_info["metrics"] = [
+            {
+                "name": metric.name,
+                "metric_type": metric.metric_type,
+                "description": metric.description,
+                "categories": metric.categories,
+            }
+            for metric in task.metrics
+        ]
+        self.storage.save_task_meta(task.id, meta_info)
+
     async def aggregate(self) -> None:  # pylint: disable=too-many-branches
         """Aggregate the evaluation results and save an overall result."""
         meta_info: dict = {
             "total_tasks": len(self.benchmark),
             "total_repeats": self.n_repeat,
+            "total_stats": {
+                "llm": defaultdict(int),
+                "agent": 0,
+                "tool": defaultdict(int),
+                "embedding": defaultdict(int),
+                "chat_usage": {},
+            },
             "repeats": {},
             "schema_version": 1,
         }
@@ -93,8 +116,47 @@ class EvaluatorBase:
                 "metrics": {},
                 "completed_ids": [],
                 "incomplete_ids": [],
+                "stats": {
+                    "llm": defaultdict(int),
+                    "agent": 0,
+                    "tool": defaultdict(int),
+                    "embedding": defaultdict(int),
+                    "chat_usage": {},
+                },
             }
             for task in self.benchmark:
+                current_stats = self.storage.get_solution_stats(
+                    task.id,
+                    repeat_id,
+                )
+                for model_name, cnt in current_stats.get("llm", {}).items():
+                    current_repeat["stats"]["llm"][model_name] += cnt
+                current_repeat["stats"]["agent"] += current_stats.get(
+                    "agent",
+                    0,
+                )
+                for tool_name, cnt in current_stats.get("tool", {}).items():
+                    current_repeat["stats"]["tool"][tool_name] += cnt
+                for model_name, cnt in current_stats.get(
+                    "embedding",
+                    {},
+                ).items():
+                    current_repeat["stats"]["embedding"][model_name] += cnt
+                for model_name, usage in current_stats.get(
+                    "chat_usage",
+                    {},
+                ).items():
+                    if model_name not in current_repeat["stats"]["chat_usage"]:
+                        current_repeat["stats"]["chat_usage"][
+                            model_name
+                        ] = defaultdict(int)
+                    current_repeat["stats"]["chat_usage"][model_name][
+                        "input_tokens"
+                    ] += usage.get("input_tokens", 0)
+                    current_repeat["stats"]["chat_usage"][model_name][
+                        "output_tokens"
+                    ] += usage.get("output_tokens", 0)
+
                 for metric in task.metrics:
                     # Create a new dict in aggregated_result
                     if metric.name not in current_repeat["metrics"]:
@@ -187,6 +249,31 @@ class EvaluatorBase:
                 )
 
             meta_info["repeats"][repeat_id] = current_repeat
+            for model_name, cnt in current_repeat["stats"]["llm"].items():
+                meta_info["total_stats"]["llm"][model_name] += cnt
+            meta_info["total_stats"]["agent"] += current_repeat["stats"].get(
+                "agent",
+                0,
+            )
+            for tool_name, cnt in current_repeat["stats"]["tool"].items():
+                meta_info["total_stats"]["tool"][tool_name] += cnt
+            for model_name, cnt in current_repeat["stats"][
+                "embedding"
+            ].items():
+                meta_info["total_stats"]["embedding"][model_name] += cnt
+            for model_name, usage in current_repeat["stats"][
+                "chat_usage"
+            ].items():
+                if model_name not in meta_info["total_stats"]["chat_usage"]:
+                    meta_info["total_stats"]["chat_usage"][
+                        model_name
+                    ] = defaultdict(int)
+                meta_info["total_stats"]["chat_usage"][model_name][
+                    "input_tokens"
+                ] += usage.get("input_tokens", 0)
+                meta_info["total_stats"]["chat_usage"][model_name][
+                    "output_tokens"
+                ] += usage.get("output_tokens", 0)
 
         # save
         self.storage.save_aggregation_result(meta_info)

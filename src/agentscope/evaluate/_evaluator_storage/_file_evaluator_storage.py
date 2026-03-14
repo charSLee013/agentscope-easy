@@ -10,6 +10,7 @@ from .._solution import SolutionOutput
 from .._metric_base import MetricResult
 from ...agent import AgentBase
 from ...message import Msg
+from ...types import JSONSerializableObject
 
 
 class FileEvaluatorStorage(EvaluatorStorageBase):
@@ -29,17 +30,26 @@ class FileEvaluatorStorage(EvaluatorStorageBase):
     """
 
     SOLUTION_FILE_NAME = "solution.json"
+    SOLUTION_STATS_FILE_NAME = "stats.json"
     EVALUATION_DIR_NAME = "evaluation"
     EVALUATION_RESULT_FILE = "evaluation_result.json"
     EVALUATION_META_FILE = "evaluation_meta.json"
+    TASK_META_FILE = "task_meta.json"
     AGENT_PRINTING_LOG = "logging.txt"
 
     def __init__(self, save_dir: str) -> None:
         """Initialize the file evaluator storage."""
-        self.save_dir = save_dir
+        self.save_dir = os.path.abspath(save_dir)
 
-    def _get_save_path(self, task_id: str, repeat_id: str, *args: str) -> str:
+    def _get_save_path(
+        self,
+        task_id: str,
+        repeat_id: str | None,
+        *args: str,
+    ) -> str:
         """Get the save path for a given task and repeat ID."""
+        if repeat_id is None:
+            return os.path.join(self.save_dir, task_id, *args)
         return os.path.join(self.save_dir, repeat_id, task_id, *args)
 
     def save_solution_result(
@@ -279,6 +289,61 @@ class FileEvaluatorStorage(EvaluatorStorageBase):
         os.makedirs(os.path.dirname(path_file), exist_ok=True)
         with open(path_file, "w", encoding="utf-8") as f:
             json.dump(meta_info, f, ensure_ascii=False, indent=4)
+
+    def save_task_meta(
+        self,
+        task_id: str,
+        meta_info: dict[str, JSONSerializableObject],
+    ) -> None:
+        """Save the task meta information."""
+        path_file = self._get_save_path(
+            task_id,
+            None,
+            self.TASK_META_FILE,
+        )
+        os.makedirs(os.path.dirname(path_file), exist_ok=True)
+        with open(path_file, "w", encoding="utf-8") as f:
+            json.dump(meta_info, f, ensure_ascii=False, indent=4)
+
+    def save_solution_stats(
+        self,
+        task_id: str,
+        repeat_id: str,
+        stats: dict,
+    ) -> None:
+        """Save the solution statistics for a task repeat."""
+        path_file = self._get_save_path(
+            task_id,
+            repeat_id,
+            self.SOLUTION_STATS_FILE_NAME,
+        )
+        os.makedirs(os.path.dirname(path_file), exist_ok=True)
+        with open(path_file, "w", encoding="utf-8") as f:
+            json.dump(stats, f, ensure_ascii=False, indent=4)
+
+    def get_solution_stats(
+        self,
+        task_id: str,
+        repeat_id: str,
+    ) -> dict:
+        """Load the solution statistics for a task repeat."""
+        path_file = self._get_save_path(
+            task_id,
+            repeat_id,
+            self.SOLUTION_STATS_FILE_NAME,
+        )
+        if not os.path.exists(path_file):
+            return {}
+
+        try:
+            with open(path_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except JSONDecodeError as e:
+            raise JSONDecodeError(
+                f"Failed to load JSON from {path_file}: {e.msg}",
+                e.doc,
+                e.pos,
+            ) from e
 
     def get_agent_pre_print_hook(
         self,
