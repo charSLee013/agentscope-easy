@@ -15,6 +15,7 @@ from agentscope.message import (
     TextBlock,
     ImageBlock,
     AudioBlock,
+    VideoBlock,
     URLSource,
     Base64Source,
 )
@@ -31,6 +32,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
 
         self.mock_audio_path = (
             "/var/folders/gf/krg8x_ws409cpw_46b2s6rjc0000gn/T/tmpfymnv2w9.wav"
+        )
+        self.mock_video_path = (
+            "/var/folders/gf/krg8x_ws409cpw_46b2s6rjc0000gn/T/tmpfymnv2w9.mp4"
         )
 
         self.msgs_system = [
@@ -130,6 +134,14 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                                     type="base64",
                                     media_type="audio/wav",
                                     data="ZmFrZSBhdWRpbyBjb250ZW50",
+                                ),
+                            ),
+                            VideoBlock(
+                                type="video",
+                                source=Base64Source(
+                                    type="base64",
+                                    media_type="video/mp4",
+                                    data="ZmFrZSB2aWRlbyBjb250ZW50",
                                 ),
                             ),
                         ],
@@ -263,7 +275,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": "- The capital of Japan is Tokyo.\n"
                 "- The returned image can be found at: ./image.png"
                 "\n- The returned audio can be found at: "
-                f"{self.mock_audio_path}",
+                f"{self.mock_audio_path}"
+                f"\n- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -327,7 +341,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": "- The capital of Japan is Tokyo.\n- The returned"
                 " image can be found at: ./image.png\n- The"
                 " returned audio can be found at: "
-                f"{self.mock_audio_path}",
+                f"{self.mock_audio_path}\n"
+                f"- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -366,7 +382,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": "- The capital of Japan is Tokyo.\n- The returned"
                 " image can be found at: ./image.png\n- The"
                 " returned audio can be found at: "
-                f"{self.mock_audio_path}",
+                f"{self.mock_audio_path}\n"
+                f"- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -432,7 +450,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "tool_call_id": "1",
                 "content": "- The capital of Japan is Tokyo.\n- The returned"
                 " image can be found at: ./image.png\n- The returned audio can"
-                f" be found at: {self.mock_audio_path}",
+                f" be found at: {self.mock_audio_path}\n"
+                f"- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -481,7 +501,7 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
         mock_save_base64_data: MagicMock,
     ) -> None:
         """Test the chat formatter."""
-        mock_save_base64_data.return_value = self.mock_audio_path
+        mock_save_base64_data.side_effect = self._mock_save_base64_data
 
         formatter = DashScopeChatFormatter()
 
@@ -524,14 +544,18 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
         self.assertListEqual(res, [])
 
     @patch("agentscope.formatter._formatter_base._save_base64_data")
-    async def test_chat_formatter_with_extract_image_blocks(
+    async def test_chat_formatter_with_extract_media_blocks(
         self,
         mock_save_base64_data: MagicMock,
     ) -> None:
-        """Test the chat formatter with promote_tool_result_images=True."""
-        mock_save_base64_data.return_value = self.mock_audio_path
+        """Test media promotion from tool results in chat formatter."""
+        mock_save_base64_data.side_effect = self._mock_save_base64_data
 
-        formatter = DashScopeChatFormatter(promote_tool_result_images=True)
+        formatter = DashScopeChatFormatter(
+            promote_tool_result_images=True,
+            promote_tool_result_audios=True,
+            promote_tool_result_videos=True,
+        )
 
         # Test with tool result containing image blocks
         res = await formatter.format(
@@ -599,7 +623,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": "- The capital of Japan is Tokyo.\n"
                 "- The returned image can be found at: ./image.png"
                 "\n- The returned audio can be found at: "
-                f"{self.mock_audio_path}",
+                f"{self.mock_audio_path}"
+                f"\n- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -607,7 +633,7 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": [
                     {
                         "text": "<system-info>The following are "
-                        "the image contents from the tool "
+                        "the media contents from the tool "
                         "result of 'get_capital':",
                     },
                     {
@@ -615,6 +641,20 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                     },
                     {
                         "image": f"file://{os.path.abspath(self.image_path)}",
+                    },
+                    {
+                        "text": "\n- The audio from "
+                        f"'{self.mock_audio_path}': ",
+                    },
+                    {
+                        "audio": self.mock_audio_path,
+                    },
+                    {
+                        "text": "\n- The video from "
+                        f"'{self.mock_video_path}': ",
+                    },
+                    {
+                        "video": self.mock_video_path,
                     },
                     {
                         "text": "</system-info>",
@@ -635,7 +675,7 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
         mock_save_base64_data: MagicMock,
     ) -> None:
         """Test the multi-agent formatter."""
-        mock_save_base64_data.return_value = self.mock_audio_path
+        mock_save_base64_data.side_effect = self._mock_save_base64_data
 
         formatter = DashScopeMultiAgentFormatter()
 
@@ -731,16 +771,17 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
         )
 
     @patch("agentscope.formatter._formatter_base._save_base64_data")
-    async def test_multiagent_formatter_with_promote_tool_result_images(
+    async def test_multiagent_formatter_with_promote_media_tool_result(
         self,
         mock_save_base64_data: MagicMock,
     ) -> None:
-        """Test the multi-agent formatter with
-        promote_tool_result_images=True."""
-        mock_save_base64_data.return_value = self.mock_audio_path
+        """Test media promotion from tool results in multi-agent formatter."""
+        mock_save_base64_data.side_effect = self._mock_save_base64_data
 
         formatter = DashScopeMultiAgentFormatter(
             promote_tool_result_images=True,
+            promote_tool_result_audios=True,
+            promote_tool_result_videos=True,
         )
 
         # Test with tool result containing image blocks
@@ -809,7 +850,9 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": "- The capital of Japan is Tokyo.\n- The returned"
                 " image can be found at: ./image.png\n- The"
                 " returned audio can be found at: "
-                f"{self.mock_audio_path}",
+                f"{self.mock_audio_path}"
+                f"\n- The returned video can be found at: "
+                f"{self.mock_video_path}",
                 "name": "get_capital",
             },
             {
@@ -817,7 +860,7 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                 "content": [
                     {
                         "text": "<system-info>The following are "
-                        "the image contents from the tool "
+                        "the media contents from the tool "
                         "result of 'get_capital':",
                     },
                     {
@@ -825,6 +868,20 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
                     },
                     {
                         "image": f"file://{os.path.abspath(self.image_path)}",
+                    },
+                    {
+                        "text": "\n- The audio from "
+                        f"'{self.mock_audio_path}': ",
+                    },
+                    {
+                        "audio": self.mock_audio_path,
+                    },
+                    {
+                        "text": "\n- The video from "
+                        f"'{self.mock_video_path}': ",
+                    },
+                    {
+                        "video": self.mock_video_path,
                     },
                     {
                         "text": "</system-info>",
@@ -840,6 +897,16 @@ class TestDashScopeFormatter(IsolatedAsyncioTestCase):
 
         self.maxDiff = None
         self.assertListEqual(expected_result, res)
+
+    def _mock_save_base64_data(
+        self,
+        media_type: str,
+        _base64_data: str,
+    ) -> str:
+        """Return deterministic mock paths for base64 audio/video payloads."""
+        if "video" in media_type:
+            return self.mock_video_path
+        return self.mock_audio_path
 
     async def asyncTearDown(self) -> None:
         """Clean up the test environment."""
