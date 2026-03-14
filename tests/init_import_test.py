@@ -71,3 +71,57 @@ raise SystemExit(1)
     res = _run_python(code)
     assert res.returncode == 0, f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
     assert "pip install requests" in res.stdout
+
+
+def test_import_agentscope_tts_is_provider_safe() -> None:
+    code = r"""
+import builtins
+
+real_import = builtins.__import__
+blocked = {"openai", "dashscope", "google", "google.genai"}
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if (
+        name in blocked
+        or any(name.startswith(prefix + ".") for prefix in blocked)
+    ):
+        raise ModuleNotFoundError(f"blocked: {name}")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+import agentscope
+import agentscope.tts
+
+print(sorted(agentscope.tts.__all__))
+"""
+    res = _run_python(code)
+    assert res.returncode == 0, f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+    assert "OpenAITTSModel" in res.stdout
+
+
+def test_import_agentscope_tune_is_trinity_safe() -> None:
+    code = r"""
+import builtins
+
+real_import = builtins.__import__
+blocked = {"trinity", "omegaconf"}
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if (
+        name in blocked
+        or any(name.startswith(prefix + ".") for prefix in blocked)
+    ):
+        raise ModuleNotFoundError(f"blocked: {name}")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+import agentscope
+import agentscope.tune
+
+print(sorted(agentscope.tune.__all__))
+"""
+    res = _run_python(code)
+    assert res.returncode == 0, f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+    assert "WorkflowType" in res.stdout

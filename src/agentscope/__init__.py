@@ -23,6 +23,7 @@ _LAZY_SUBMODULES: set[str] = {
     "module",
     "message",
     "model",
+    "tune",
     "tool",
     "formatter",
     "memory",
@@ -34,6 +35,7 @@ _LAZY_SUBMODULES: set[str] = {
     "pipeline",
     "tracing",
     "rag",
+    "tts",
 }
 
 
@@ -53,6 +55,7 @@ def __dir__() -> list[str]:
 def init(
     project: str | None = None,
     name: str | None = None,
+    run_id: str | None = None,
     logging_path: str | None = None,
     logging_level: str = "INFO",
     studio_url: str | None = None,
@@ -65,6 +68,9 @@ def init(
             The project name.
         name (`str | None`, optional):
             The name of the run.
+        run_id (`str | None`, optional):
+            The run identity used to distinguish one live execution from
+            another.
         logging_path (`str | None`, optional):
             The path to saving the log file. If not provided, logs will not be
             saved.
@@ -86,6 +92,9 @@ def init(
 
     if name:
         _config.name = name
+
+    if run_id:
+        _config.run_id = run_id
 
     setup_logger(logging_level, logging_path)
 
@@ -145,6 +154,7 @@ __all__ = [
     "module",
     "message",
     "model",
+    "tune",
     "tool",
     "formatter",
     "memory",
@@ -157,6 +167,7 @@ __all__ = [
     "pipeline",
     "tracing",
     "rag",
+    "tts",
     # functions
     "init",
     "setup_logger",

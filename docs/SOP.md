@@ -96,6 +96,7 @@
 - rag → docs/rag/SOP.md
 - session → docs/session/SOP.md
 - pipeline → docs/pipeline/SOP.md
+- tune → docs/tune/SOP.md
 - tracing → docs/tracing/SOP.md
 - evaluate → docs/evaluate/SOP.md
 - mcp → docs/mcp/SOP.md
