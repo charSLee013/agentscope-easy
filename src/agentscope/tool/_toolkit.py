@@ -970,6 +970,7 @@ class Toolkit(StateModule):
             for _ in range(100):
                 candidate = f"{func_name}_{shortuuid.uuid()[:5]}"
                 if candidate not in self.tools:
+                    func_obj.original_name = func_name
                     func_obj.name = candidate
                     func_obj.json_schema["function"]["name"] = candidate
                     self.tools[candidate] = func_obj

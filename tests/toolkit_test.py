@@ -880,6 +880,10 @@ class ToolkitTest(IsolatedAsyncioTestCase):
             renamed_tools[0],
             [schema["function"]["name"] for schema in renamed_schema],
         )
+        self.assertEqual(
+            self.toolkit.tools[renamed_tools[0]].original_name,
+            "sync_func",
+        )
 
     async def test_namesake_strategy_with_custom_func_name(self) -> None:
         """Custom func_name should also honor duplicate-name strategies."""
@@ -901,6 +905,10 @@ class ToolkitTest(IsolatedAsyncioTestCase):
             if name.startswith("custom_tool_")
         ]
         self.assertEqual(len(renamed_tools), 1)
+        self.assertEqual(
+            self.toolkit.tools[renamed_tools[0]].original_name,
+            "custom_tool",
+        )
 
     async def test_register_with_valid_json_schema(self) -> None:
         """Test registering a tool with valid custom json_schema."""

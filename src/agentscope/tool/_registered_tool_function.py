@@ -51,6 +51,8 @@ class RegisteredToolFunction:
     response as arguments. If it returns `None`, the tool result will be
     returned as is. If it returns a `ToolResponse`, the returned block
     will be used as the final tool response."""
+    original_name: str | None = None
+    """The original tool name before any rename strategy is applied."""
 
     @property
     def extended_json_schema(self) -> dict:
