@@ -65,12 +65,16 @@ class _InMemoryExporter(SpanExporter):
                 if model_name not in current["chat_usage"]:
                     current["chat_usage"][model_name] = defaultdict(int)
 
-                usage = output.get("usage", {}) if isinstance(output, dict) else {}
+                usage = (
+                    output.get("usage", {}) if isinstance(output, dict) else {}
+                )
                 current["chat_usage"][model_name]["input_tokens"] += usage.get(
                     "input_tokens",
                     0,
                 )
-                current["chat_usage"][model_name]["output_tokens"] += usage.get(
+                current["chat_usage"][model_name][
+                    "output_tokens"
+                ] += usage.get(
                     "output_tokens",
                     0,
                 )

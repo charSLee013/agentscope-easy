@@ -72,6 +72,21 @@ def sync_func(
     )
 
 
+class TestCls:
+    """A duplicate-name tool class for registration tests."""
+
+    def sync_func(self) -> ToolResponse:
+        """A duplicate sync function for testing."""
+        return ToolResponse(
+            content=[
+                TextBlock(
+                    type="text",
+                    text="duplicate",
+                ),
+            ],
+        )
+
+
 async def async_generator_func(
     raise_cancel: bool,
 ) -> AsyncGenerator[ToolResponse, None]:
@@ -818,6 +833,74 @@ class ToolkitTest(IsolatedAsyncioTestCase):
                     TextBlock(type="text", text="Processed"),
                 ],
             )
+
+    async def test_namesake_strategy_skip_override_and_rename(self) -> None:
+        """Duplicate tool names should respect the selected strategy."""
+        duplicate_func = TestCls().sync_func
+
+        self.toolkit.register_tool_function(
+            sync_func,
+            preset_kwargs={"arg1": 1},
+        )
+
+        self.toolkit.register_tool_function(
+            duplicate_func,
+            namesake_strategy="skip",
+        )
+        self.assertIn("sync_func", self.toolkit.tools)
+        self.assertEqual(len(self.toolkit.tools), 1)
+
+        self.toolkit.register_tool_function(
+            duplicate_func,
+            namesake_strategy="override",
+        )
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="override",
+                name="sync_func",
+                input={},
+            ),
+        )
+        chunks = [chunk async for chunk in res]
+        self.assertEqual(chunks[-1].content[0]["text"], "duplicate")
+
+        self.toolkit.register_tool_function(
+            duplicate_func,
+            namesake_strategy="rename",
+        )
+        renamed_tools = [
+            name
+            for name in self.toolkit.tools
+            if name.startswith("sync_func_")
+        ]
+        self.assertEqual(len(renamed_tools), 1)
+        renamed_schema = self.toolkit.get_json_schemas()
+        self.assertIn(
+            renamed_tools[0],
+            [schema["function"]["name"] for schema in renamed_schema],
+        )
+
+    async def test_namesake_strategy_with_custom_func_name(self) -> None:
+        """Custom func_name should also honor duplicate-name strategies."""
+        self.toolkit.register_tool_function(
+            sync_func,
+            func_name="custom_tool",
+            preset_kwargs={"arg1": 1},
+        )
+
+        self.toolkit.register_tool_function(
+            TestCls().sync_func,
+            func_name="custom_tool",
+            namesake_strategy="rename",
+        )
+
+        renamed_tools = [
+            name
+            for name in self.toolkit.tools
+            if name.startswith("custom_tool_")
+        ]
+        self.assertEqual(len(renamed_tools), 1)
 
     async def test_register_with_valid_json_schema(self) -> None:
         """Test registering a tool with valid custom json_schema."""

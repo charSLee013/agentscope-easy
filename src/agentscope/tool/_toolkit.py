@@ -6,6 +6,7 @@ import inspect
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
+import shortuuid
 from typing import (
     AsyncGenerator,
     Literal,
@@ -209,6 +210,12 @@ class Toolkit(StateModule):
             ]
         )
         | None = None,
+        namesake_strategy: Literal[
+            "override",
+            "skip",
+            "raise",
+            "rename",
+        ] = "raise",
     ) -> None:
         """Register a tool function to the toolkit.
 
@@ -254,6 +261,9 @@ class Toolkit(StateModule):
                 result will be returned as is. If it returns a
                 `ToolResponse`, the returned block will be used as the
                 final tool result.
+            namesake_strategy (`Literal['raise', 'override', 'skip', \
+            'rename']`, defaults to `'raise'`):
+                The strategy used when the tool name already exists.
         """
         # Arguments checking
         if group_name not in self.groups and group_name != "basic":
@@ -317,7 +327,6 @@ class Toolkit(StateModule):
             )
 
         func_name = func_name or input_func_name
-        self._validate_tool_function(func_name)
         json_schema["function"]["name"] = func_name
 
         # Override the description if provided
@@ -357,7 +366,10 @@ class Toolkit(StateModule):
             postprocess_func=postprocess_func,
         )
 
-        self.tools[func_name] = func_obj
+        self._register_with_namesake_strategy(
+            func_obj=func_obj,
+            namesake_strategy=namesake_strategy,
+        )
 
     def remove_tool_function(self, tool_name: str) -> None:
         """Remove tool function from the toolkit by its name.
@@ -652,6 +664,12 @@ class Toolkit(StateModule):
             ]
         )
         | None = None,
+        namesake_strategy: Literal[
+            "override",
+            "skip",
+            "raise",
+            "rename",
+        ] = "raise",
     ) -> None:
         """Register tool functions from an MCP client.
 
@@ -679,6 +697,9 @@ class Toolkit(StateModule):
                 result will be returned as is. If it returns a
                 `ToolResponse`, the returned block will be used as the
                 final tool result.
+            namesake_strategy (`Literal['raise', 'override', 'skip', \
+            'rename']`, defaults to `'raise'`):
+                The strategy used when the tool name already exists.
         """
         if (
             isinstance(mcp_client, StatefulClientBase)
@@ -751,6 +772,7 @@ class Toolkit(StateModule):
                 group_name=group_name,
                 preset_kwargs=preset_kwargs,
                 postprocess_func=postprocess_func,
+                namesake_strategy=namesake_strategy,
             )
 
         logger.info(
@@ -906,6 +928,68 @@ class Toolkit(StateModule):
                 f"A function with name '{func_name} is already registered "
                 "in the toolkit.",
             )
+
+    def _register_with_namesake_strategy(
+        self,
+        func_obj: RegisteredToolFunction,
+        namesake_strategy: Literal[
+            "override",
+            "skip",
+            "raise",
+            "rename",
+        ],
+    ) -> None:
+        """Register a tool after resolving duplicate-name conflicts."""
+        func_name = func_obj.name
+        if func_name not in self.tools:
+            self.tools[func_name] = func_obj
+            return
+
+        if namesake_strategy == "raise":
+            self._validate_tool_function(func_name)
+            return
+
+        if namesake_strategy == "skip":
+            logger.warning(
+                "A function with name '%s' is already registered in the "
+                "toolkit. Skipping registration.",
+                func_name,
+            )
+            return
+
+        if namesake_strategy == "override":
+            logger.warning(
+                "A function with name '%s' is already registered in the "
+                "toolkit. Overriding it.",
+                func_name,
+            )
+            self.tools[func_name] = func_obj
+            return
+
+        if namesake_strategy == "rename":
+            for _ in range(100):
+                candidate = f"{func_name}_{shortuuid.uuid()[:5]}"
+                if candidate not in self.tools:
+                    func_obj.name = candidate
+                    func_obj.json_schema["function"]["name"] = candidate
+                    self.tools[candidate] = func_obj
+                    logger.warning(
+                        "A function with name '%s' is already registered in "
+                        "the toolkit. Renamed the new tool to '%s'.",
+                        func_name,
+                        candidate,
+                    )
+                    return
+
+            raise RuntimeError(
+                f"Failed to register tool function '{func_name}' with a "
+                "unique name after 100 attempts.",
+            )
+
+        raise ValueError(
+            f"Invalid namesake_strategy: {namesake_strategy}. Supported "
+            "strategies are 'raise', 'override', 'skip', and 'rename'.",
+        )
 
     @staticmethod
     def _parse_tool_function(
