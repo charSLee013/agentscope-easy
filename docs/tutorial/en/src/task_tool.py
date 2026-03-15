@@ -19,7 +19,6 @@ All above features are implemented by the ``Toolkit`` class in AgentScope, which
 .. tip:: The support of MCP (Model Context Protocol) refers to the :ref:`mcp` section.
 """
 import asyncio
-import inspect
 import json
 from typing import Any, AsyncGenerator
 
@@ -158,8 +157,8 @@ asyncio.run(example_tool_execution())
 
 
 # Example tool function
-def tool_function(**kwargs: Any) -> ToolResponse:
-    """A tool function"""
+def flexible_tool_function(**kwargs: Any) -> ToolResponse:
+    """A tool function that accepts extended keyword arguments."""
     return ToolResponse(
         content=[
             TextBlock(
@@ -180,7 +179,9 @@ class ThinkingModel(BaseModel):
 
 
 # Register
-toolkit.set_extended_model("my_search", ThinkingModel)
+toolkit.clear()
+toolkit.register_tool_function(flexible_tool_function)
+toolkit.set_extended_model("flexible_tool_function", ThinkingModel)
 
 print("The extended JSON Schema:")
 print(json.dumps(toolkit.get_json_schemas(), indent=4, ensure_ascii=False))

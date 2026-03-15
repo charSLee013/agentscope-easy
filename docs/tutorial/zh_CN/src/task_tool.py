@@ -19,7 +19,6 @@
 .. tip:: MCP（模型上下文协议）的支持请参考 :ref:`mcp` 部分。
 """
 import asyncio
-import inspect
 import json
 from typing import Any, AsyncGenerator
 
@@ -162,8 +161,8 @@ asyncio.run(example_tool_execution())
 
 
 # 示例工具函数
-def tool_function(**kwargs: Any) -> ToolResponse:
-    """一个工具函数"""
+def flexible_tool_function(**kwargs: Any) -> ToolResponse:
+    """一个接受扩展关键字参数的工具函数。"""
     return ToolResponse(
         content=[
             TextBlock(
@@ -184,7 +183,9 @@ class ThinkingModel(BaseModel):
 
 
 # 注册
-toolkit.set_extended_model("my_search", ThinkingModel)
+toolkit.clear()
+toolkit.register_tool_function(flexible_tool_function)
+toolkit.set_extended_model("flexible_tool_function", ThinkingModel)
 
 print("扩展后的 JSON Schema：")
 print(json.dumps(toolkit.get_json_schemas(), indent=4, ensure_ascii=False))

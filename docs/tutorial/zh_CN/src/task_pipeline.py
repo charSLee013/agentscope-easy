@@ -15,7 +15,8 @@
 
 """
 
-import os, asyncio
+import asyncio
+import os
 
 from agentscope.formatter import DashScopeMultiAgentFormatter
 from agentscope.message import Msg
@@ -73,7 +74,7 @@ async def example_broadcast_message():
             "现在请简要介绍一下自己，包括你的姓名、年龄和职业。",
             "user",
         ),
-    ) as hub:
+    ):
         # 无需手动消息传递的群聊
         await alice()
         await bob()

@@ -170,17 +170,21 @@ AgentScope v1.0 新功能概览:
 
 ```bash
 # 从 GitHub 拉取源码
-git clone -b main https://github.com/agentscope-ai/agentscope.git
+git clone -b easy https://github.com/charSLee013/agentscope-easy.git
 
 # 以可编辑模式安装包
-cd agentscope
+cd agentscope-easy
 pip install -e .
+# 或使用 uv：
+# uv pip install -e .
 ```
 
 #### 📦 从PyPi安装
 
 ```bash
 pip install agentscope
+# 或使用 uv：
+# uv pip install agentscope
 ```
 
 ## 📝 样例

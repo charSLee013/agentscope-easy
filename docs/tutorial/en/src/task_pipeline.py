@@ -15,7 +15,8 @@ as syntax sugar for chaining agents together, including
 
 """
 
-import os, asyncio
+import asyncio
+import os
 
 from agentscope.formatter import DashScopeMultiAgentFormatter
 from agentscope.message import Msg
@@ -75,7 +76,7 @@ async def example_broadcast_message():
             "Now introduce yourself in one sentence, including your name, age and career.",
             "user",
         ),
-    ) as hub:
+    ):
         # Group chat without manual message passing
         await alice()
         await bob()

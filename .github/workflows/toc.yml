@@ -3,9 +3,13 @@ on:
   push:
     paths:
       - 'README.md'
-      - 'README_ZH.md'
+      - 'README_zh.md'
     branches-ignore:
       - 'main'
+
+concurrency:
+  group: readme-updates-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   generateTOC:
@@ -18,8 +22,8 @@ jobs:
         with:
           TOC_TITLE: "## 📑 Table of Contents"
           CREATE_PR: false
-          TARGET_PATHS: "README.md,README_ZH.md"
+          TARGET_PATHS: "README.md,README_zh.md"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TOC_TITLE_MAP: |
             README.md: ## 📑 Table of Contents
-            README_ZH.md: ## 📑 目录
+            README_zh.md: ## 📑 目录

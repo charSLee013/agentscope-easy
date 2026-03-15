@@ -38,6 +38,7 @@ Welcome to AgentScope's documentation!
    tutorial/task_model
    tutorial/task_prompt
    tutorial/task_tool
+   tutorial/task_agent_skill
    tutorial/task_memory
    tutorial/task_long_term_memory
    tutorial/task_tts
