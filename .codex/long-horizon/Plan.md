@@ -6,7 +6,7 @@
   - 按冻结决策持续把 `main -> easy` 的剩余 runtime 差异收进 `easy`
   - 用少量高价值 squash commits 吃掉高冲突主干，而不是继续碎步叶子修补
 - 当前阶段：
-  - M6 `Trinity / tune 全收口（已完成）`
+  - M7 `Closeout fixups（已完成）`
 
 ## 前置说明
 
@@ -136,6 +136,27 @@
 - 风险：
   - 训练模块引入新的顶层导出与示例面，若 import-safe 处理不对，会把
     `agentscope` 顶层导入重新搞脆。
+
+### M7 - Closeout fixups
+
+- 目标：
+  - 修复吸收后暴露出的真实 correctness gaps，而不回退已落地主干方向
+  - 纠正 long-horizon proof 提前宣告完成的问题
+- 验收标准：
+  - streaming tracing 为 LLM/tool span 写入正确的专有 response attrs
+  - `tune` workflow 校验改为语义契约校验
+  - OpenAI/Gemini TTS 流式输出统一为累计 payload，最后一个有内容块
+    `is_last=True`
+  - long-horizon 文档与 final proof 回到真实状态
+- 验证命令：
+  - `./.venv/bin/python -m pytest tests/tracer_test.py tests/tracing_converter_test.py tests/tracing_extractor_test.py tests/tracing_utils_test.py tests/config_test.py tests/evaluation_test.py tests/tune_test.py tests/model_trinity_test.py tests/init_import_test.py tests/tts_base_test.py tests/tts_openai_test.py tests/tts_gemini_test.py tests/react_agent_test.py tests/pipeline_test.py tests/agent/test_audio_playback_gate.py -q`
+  - `./.venv/bin/python -m ruff check src tests`
+  - `./.venv/bin/python -m pylint -E src`
+  - `PRE_COMMIT_HOME="$PWD/.cache/pre-commit" ./.venv/bin/pre-commit run --all-files`
+  - `python3 ~/.codex/skills/long-horizon-runner/scripts/validate_long_horizon_docs.py --target .`
+  - `python3 ~/.codex/skills/long-horizon-runner/scripts/finalize_long_horizon_run.py --target . --require-path .codex/long-horizon/source-matrix.md --require-path .codex/long-horizon/Prompt.md --require-path .codex/long-horizon/Plan.md --require-path .codex/long-horizon/Implement.md --require-path .codex/long-horizon/Documentation.md`
+- 风险：
+  - 若只修代码不重跑 proof，会继续保留错误的“已完成”结论。
 
 ## Stop-and-fix 规则
 

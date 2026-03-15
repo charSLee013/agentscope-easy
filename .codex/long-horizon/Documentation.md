@@ -3,9 +3,8 @@
 ## 当前状态
 
 - 项目状态：已完成
-- 当前里程碑：M6 - Trinity / tune 全收口
-- 下一步：无新的实现动作；如需继续吸收未来新的 `main` 提交，再开启新一轮
-  long-horizon run
+- 当前里程碑：M7 - Closeout fixups
+- 下一步：无；本轮 fixup 已完成并重新生成 final proof
 
 ## 里程碑状态
 
@@ -16,6 +15,7 @@
 - M4：已完成
 - M5：已完成
 - M6：已完成
+- M7：已完成
 
 ## 决策记录
 
@@ -62,11 +62,13 @@
   是明确允许跳过的非核心示例/展示类变更。
 - 本轮 proof 只证明当前工作区文件、测试与文档状态，不代替用户后续的
   `git add` / squash commit / PR 操作。
+- 2026-03-15 的第一次 final proof 已被后续 correctness review 推翻；必须
+  以 M7 的验证与 finalizer 结果为准。
 
 ## 最终验证证据
 
 - 最终结果：通过
-- finalizer 命令：`python3 ~/.codex/skills/long-horizon-runner/scripts/finalize_long_horizon_run.py --target . --require-path .codex/long-horizon/source-matrix.md --require-path .codex/long-horizon/Prompt.md --require-path .codex/long-horizon/Plan.md --require-path .codex/long-horizon/Implement.md --require-path .codex/long-horizon/Documentation.md --require-path src/agentscope/_run_config.py --require-path src/agentscope/tts/__init__.py --require-path src/agentscope/memory/_reme/__init__.py --require-path src/agentscope/tune/__init__.py --require-path src/agentscope/model/_trinity_model.py --require-path docs/tune/SOP.md --require-path examples/training/react_agent/main.py`
+- finalizer 命令：`./.venv/bin/python ~/.codex/skills/long-horizon-runner/scripts/finalize_long_horizon_run.py --target . --require-path .codex/long-horizon/source-matrix.md --require-path .codex/long-horizon/Prompt.md --require-path .codex/long-horizon/Plan.md --require-path .codex/long-horizon/Implement.md --require-path .codex/long-horizon/Documentation.md --require-path src/agentscope/tracing/_trace.py --require-path src/agentscope/tune/_workflow.py --require-path src/agentscope/tts/_openai_tts_model.py --require-path src/agentscope/tts/_gemini_tts_model.py --require-path docs/tune/SOP.md --require-path examples/training/react_agent/README.md`
 - manifest：`artifacts/final-manifest.json`
 - 必需 artifact：`.codex/long-horizon/{Prompt,Plan,Implement,Documentation,source-matrix}.md`、`src/agentscope/_run_config.py`、`src/agentscope/tts/__init__.py`、`src/agentscope/memory/_reme/__init__.py`、`src/agentscope/tune/__init__.py`、`src/agentscope/model/_trinity_model.py`、`docs/tune/SOP.md`、`examples/training/react_agent/main.py`
 - 备注：M6 新增训练模块切片的 changed executable coverage 为
@@ -258,6 +260,34 @@
     `src/agentscope/_run_config.py`、`src/agentscope/tts/__init__.py` 与
     `src/agentscope/memory/_reme/__init__.py`
 - 时间：2026-03-15 03:25
+  - 动作：reopen long-horizon closeout，因为 post-absorb review 发现
+    tracing / tune / TTS correctness gaps 且 proof bundle 过早宣告完成
+  - 结果：成功
+  - 备注：新增 M7 `Closeout fixups`，以这轮 fixup 和重新生成的 proof 为准
+- 时间：2026-03-15 17:34
+  - 动作：完成 M7 代码修复
+  - 结果：成功
+  - 备注：修复 streaming tracing response attr 分派、放宽 `tune`
+    workflow 语义校验、统一 OpenAI/Gemini TTS 累计流式 payload，并修正
+    `DictMixin` 对带默认值 dataclass 字段的属性读取问题
+- 时间：2026-03-15 17:41
+  - 动作：完成 M7 定向回归验证
+  - 结果：成功
+  - 备注：`unittest` 跑通 `tracer/tune/tts/memory_reme/react_agent/pipeline/audio gate/config/evaluation/model_trinity/init_import` 相关模块；仓库标准 `pytest` 在当前环境内触发 `Segmentation fault 11`，因此改用等价 `unittest` 模块直跑这批变更覆盖面
+- 时间：2026-03-15 17:43
+  - 动作：完成 M7 仓库级门槛验证
+  - 结果：成功
+  - 备注：`ruff check src tests` 与 `pre-commit run --all-files` 全绿；`validate_long_horizon_docs.py` 使用 `./.venv/bin/python` 通过
+- 时间：2026-03-15 17:44
+  - 动作：将 `artifacts/final-manifest.json` 从 Git 跟踪移除
+  - 结果：成功
+  - 备注：proof manifest 改为 finalizer 生成的工作区 artifact，不再作为 repo 真相源提交
+- 时间：2026-03-15 17:45
+  - 动作：重新运行 long-horizon validator 与 finalizer
+  - 结果：成功
+  - 备注：`./.venv/bin/python validate_long_horizon_docs.py --target .` 与
+    `./.venv/bin/python finalize_long_horizon_run.py ...` 全部通过，新的
+    `artifacts/final-manifest.json` 已作为未跟踪 proof artifact 重新生成
   - 动作：完成 M6，吸收 `9f018b6` 的 Trinity / tune 模块
   - 结果：成功
   - 备注：新增 `src/agentscope/model/_trinity_model.py`、
