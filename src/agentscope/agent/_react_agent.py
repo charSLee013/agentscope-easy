@@ -540,6 +540,8 @@ class ReActAgent(ReActAgentBase):
                     if self.tts_model.stream:
                         async for tts_chunk in tts_res:
                             speech = tts_chunk.content
+                            if tts_chunk.is_last:
+                                continue
                             await self.print(msg, False, speech=speech)
                     else:
                         speech = tts_res.content
@@ -749,6 +751,8 @@ class ReActAgent(ReActAgentBase):
                 if self.tts_model.stream:
                     async for tts_chunk in tts_res:
                         speech = tts_chunk.content
+                        if tts_chunk.is_last:
+                            continue
                         await self.print(res_msg, False, speech=speech)
                 else:
                     speech = tts_res.content

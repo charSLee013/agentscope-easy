@@ -600,8 +600,14 @@ class ReActAgentTest(IsolatedAsyncioTestCase):
             for call in agent.print.await_args_list
             if "speech" in call.kwargs
         ]
+        self.assertEqual(len(speeches), 2)
         self.assertIn(FakeTTSModel._audio("stream-1"), speeches)
         self.assertIn(FakeTTSModel._audio("stream-2"), speeches)
+        self.assertTrue(agent.print.await_args_list[-1].args[1])
+        self.assertEqual(
+            agent.print.await_args_list[-1].kwargs["speech"],
+            FakeTTSModel._audio("stream-2"),
+        )
 
     async def test_summarizing_path_uses_tts_model(self) -> None:
         """The summary fallback should also synthesize speech."""
