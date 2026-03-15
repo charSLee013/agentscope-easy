@@ -2,7 +2,7 @@
 """Functional counterpart for Pipeline"""
 import asyncio
 from copy import deepcopy
-from typing import Any, AsyncGenerator, Tuple, Coroutine
+from typing import Any, AsyncGenerator, Coroutine
 from ..agent import AgentBase
 from ..message import Msg
 
@@ -108,7 +108,8 @@ async def stream_printing_messages(
     agents: list[AgentBase],
     coroutine_task: Coroutine,
     end_signal: str = "[END]",
-) -> AsyncGenerator[Tuple[Msg, bool], None]:
+    yield_speech: bool = False,
+) -> AsyncGenerator[tuple[Any, ...], None]:
     """This pipeline will gather the printing messages from agents when
     execute the given coroutine task, and yield them one by one.
     Only the messages that are printed by `await self.print(msg)` in the agent
@@ -134,12 +135,13 @@ async def stream_printing_messages(
             A special signal to indicate the end of message streaming. When
             this signal is received from the message queue, the generator will
             stop yielding messages and exit the loop.
+        yield_speech (`bool`, defaults to `False`):
+            Whether to yield the optional speech side channel.
 
     Returns:
-        `AsyncGenerator[Tuple[Msg, bool], None]`:
-            An async generator that yields tuples of (message, is_last_chunk).
-            The `is_last_chunk` boolean indicates whether the message is the
-            last chunk in a streaming message.
+        `AsyncGenerator[tuple[Any, ...], None]`:
+            By default yields `(message, is_last_chunk)`. When
+            `yield_speech=True`, yields `(message, is_last_chunk, speech)`.
     """
 
     # Enable the message queue to get the intermediate messages
@@ -165,7 +167,10 @@ async def stream_printing_messages(
         if isinstance(printing_msg, str) and printing_msg == end_signal:
             break
 
-        yield printing_msg
+        if yield_speech:
+            yield printing_msg
+        else:
+            yield printing_msg[0], printing_msg[1]
 
     # Check exception after processing all messages
     exception = task.exception()

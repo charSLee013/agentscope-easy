@@ -3,6 +3,13 @@
 from agentscope import _config
 
 
+def _get_tracer():
+    """Return the tracer used by AgentScope tracing decorators."""
+    from opentelemetry import trace
+
+    return trace.get_tracer(__name__)
+
+
 def setup_tracing(endpoint: str) -> None:
     """Set up the AgentScope tracing by configuring the endpoint URL.
 

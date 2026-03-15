@@ -1,78 +1,64 @@
 # -*- coding: utf-8 -*-
-"""Attributes processor for span attributes."""
-import datetime
-import enum
-import inspect
-import json
-from dataclasses import is_dataclass
-from typing import Any
+"""Tracing attribute constants and compatibility exports."""
 
-from pydantic import BaseModel
-
-from ..message import Msg
+from ._utils import _serialize_to_str, _to_serializable  # noqa: F401
 
 
-def _to_serializable(
-    obj: Any,
-) -> Any:
-    """Convert an object to a JSON serializable type.
+class SpanAttributes:
+    """The span attributes."""
 
-    Args:
-        obj (`Any`):
-            The object to be converted to JSON serializable.
+    SPAN_KIND = "span.kind"
+    OUTPUT = "output"
+    INPUT = "input"
+    META = "metadata"
+    PROJECT_RUN_ID = "project.run_id"
 
-    Returns:
-        `Any`:
-            The converted JSON serializable object
-    """
+    GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id"
+    GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
+    GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
+    GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
+    GEN_AI_INPUT_MESSAGES = "gen_ai.input.messages"
+    GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages"
+    GEN_AI_TOOL_NAME = "gen_ai.tool.name"
+    GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"
+    GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments"
+    GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result"
+    GEN_AI_TOOL_DEFINITIONS = "gen_ai.tool.definitions"
+    GEN_AI_EMBEDDINGS_DIMENSION_COUNT = "gen_ai.embeddings.dimension.count"
 
-    # Handle primitive types first
-    if isinstance(obj, (str, int, bool, float, type(None))):
-        res = obj
-
-    elif isinstance(obj, (list, tuple, set, frozenset)):
-        res = [_to_serializable(x) for x in obj]
-
-    elif isinstance(obj, dict):
-        res = {str(key): _to_serializable(val) for (key, val) in obj.items()}
-
-    elif isinstance(obj, (Msg, BaseModel)) or is_dataclass(obj):
-        res = repr(obj)
-
-    elif inspect.isclass(obj) and issubclass(obj, BaseModel):
-        res = repr(obj)
-
-    elif isinstance(obj, (datetime.date, datetime.datetime, datetime.time)):
-        res = obj.isoformat()
-
-    elif isinstance(obj, datetime.timedelta):
-        res = obj.total_seconds()
-
-    elif isinstance(obj, enum.Enum):
-        res = _to_serializable(obj.value)
-
-    else:
-        res = str(obj)
-
-    return res
+    AGENTSCOPE_FORMAT_TARGET = "agentscope.format.target"
+    AGENTSCOPE_FORMAT_COUNT = "agentscope.format.count"
+    AGENTSCOPE_FUNCTION_NAME = "agentscope.function.name"
+    AGENTSCOPE_FUNCTION_INPUT = "agentscope.function.input"
+    AGENTSCOPE_FUNCTION_OUTPUT = "agentscope.function.output"
 
 
-def _serialize_to_str(value: Any) -> str:
-    """Get input attributes
+class OperationNameValues:
+    """Operation name values used by GenAI spans."""
 
-    Args:
-        value (`Any`):
-            The input value
+    CHAT = "chat"
+    FORMATTER = "format"
+    EMBEDDINGS = "embeddings"
+    INVOKE_AGENT = "invoke_agent"
+    INVOKE_GENERIC_FUNCTION = "invoke_generic_function"
+    EXECUTE_TOOL = "execute_tool"
 
-    Returns:
-        `str`:
-            JSON serialized string of the input value
-    """
-    try:
-        return json.dumps(value, ensure_ascii=False)
 
-    except TypeError:
-        return json.dumps(
-            _to_serializable(value),
-            ensure_ascii=False,
-        )
+class ProviderNameValues:
+    """Provider name values used by GenAI spans."""
+
+    ANTHROPIC = "anthropic"
+    DASHSCOPE = "dashscope"
+    DEEPSEEK = "deepseek"
+    GCP_GEMINI = "gcp.gemini"
+    OLLAMA = "ollama"
+    OPENAI = "openai"
+
+
+__all__ = [
+    "_serialize_to_str",
+    "_to_serializable",
+    "SpanAttributes",
+    "OperationNameValues",
+    "ProviderNameValues",
+]

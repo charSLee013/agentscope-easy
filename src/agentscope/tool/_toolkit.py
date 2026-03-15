@@ -3,6 +3,7 @@
 
 import asyncio
 import inspect
+import os
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
@@ -69,6 +70,15 @@ class ToolGroup:
     """The using notes of the tool group, to remind the agent how to use"""
 
 
+@dataclass
+class AgentSkill:
+    """Registered skill metadata exposed through the system prompt."""
+
+    name: str
+    description: str
+    dir: str
+
+
 class Toolkit(StateModule):
     """The class that supports both function- and group-level tool management.
 
@@ -95,12 +105,34 @@ class Toolkit(StateModule):
     - `get_tool_group_notes`
     """
 
-    def __init__(self) -> None:
+    _DEFAULT_AGENT_SKILL_INSTRUCTION = (
+        "# Agent Skills\n"
+        "The agent skills below are reusable capability packs. Read the "
+        "matching `SKILL.md` file before using a skill."
+    )
+    _DEFAULT_AGENT_SKILL_TEMPLATE = (
+        "## {name}\n"
+        "{description}\n"
+        'Check "{dir}/SKILL.md" for usage details.'
+    )
+
+    def __init__(
+        self,
+        agent_skill_instruction: str | None = None,
+        agent_skill_template: str | None = None,
+    ) -> None:
         """Initialize the toolkit."""
         super().__init__()
 
         self.tools: dict[str, RegisteredToolFunction] = {}
         self.groups: dict[str, ToolGroup] = {}
+        self.skills: dict[str, AgentSkill] = {}
+        self._agent_skill_instruction = (
+            agent_skill_instruction or self._DEFAULT_AGENT_SKILL_INSTRUCTION
+        )
+        self._agent_skill_template = (
+            agent_skill_template or self._DEFAULT_AGENT_SKILL_TEMPLATE
+        )
 
     def create_tool_group(
         self,
@@ -386,6 +418,74 @@ class Toolkit(StateModule):
             )
 
         self.tools.pop(tool_name, None)
+
+    def register_agent_skill(self, skill_dir: str) -> None:
+        """Register an agent skill from a directory containing `SKILL.md`."""
+        if not os.path.isdir(skill_dir):
+            raise ValueError(
+                f"The skill directory '{skill_dir}' does not exist or is "
+                "not a directory.",
+            )
+
+        path_skill_md = os.path.join(skill_dir, "SKILL.md")
+        if not os.path.isfile(path_skill_md):
+            raise ValueError(
+                f"The skill directory '{skill_dir}' must include a "
+                "SKILL.md file at the top level.",
+            )
+
+        with open(path_skill_md, "r", encoding="utf-8") as file:
+            metadata = self._parse_agent_skill_frontmatter(file.read())
+
+        name = metadata.get("name")
+        description = metadata.get("description")
+        if not name or not description:
+            raise ValueError(
+                f"The SKILL.md file in '{skill_dir}' must define `name` "
+                "and `description` in YAML front matter.",
+            )
+
+        if name in self.skills:
+            raise ValueError(
+                f"An agent skill with name '{name}' is already registered "
+                "in the toolkit.",
+            )
+
+        normalized_dir = os.path.abspath(skill_dir)
+        self.skills[name] = AgentSkill(
+            name=name,
+            description=description,
+            dir=normalized_dir,
+        )
+
+    def remove_agent_skill(self, name: str) -> None:
+        """Remove a registered agent skill by name."""
+        if name not in self.skills:
+            logger.warning(
+                "Agent skill '%s' not found in the toolkit, skipping removal.",
+                name,
+            )
+            return
+
+        self.skills.pop(name)
+
+    def get_agent_skill_prompt(self) -> str | None:
+        """Render the system-prompt appendix for registered agent skills."""
+        if not self.skills:
+            return None
+
+        skill_blocks = [
+            self._agent_skill_instruction,
+            *[
+                self._agent_skill_template.format(
+                    name=skill.name,
+                    description=skill.description,
+                    dir=skill.dir,
+                )
+                for skill in self.skills.values()
+            ],
+        ]
+        return "\n".join(skill_blocks)
 
     def get_json_schemas(
         self,
@@ -991,6 +1091,44 @@ class Toolkit(StateModule):
             f"Invalid namesake_strategy: {namesake_strategy}. Supported "
             "strategies are 'raise', 'override', 'skip', and 'rename'.",
         )
+
+    @staticmethod
+    def _parse_agent_skill_frontmatter(content: str) -> dict[str, str]:
+        """Parse the simple YAML front matter used by `SKILL.md` files."""
+        lines = content.splitlines()
+        if len(lines) < 3 or lines[0].strip() != "---":
+            raise ValueError(
+                "The SKILL.md file must start with YAML front matter.",
+            )
+
+        metadata: dict[str, str] = {}
+        for line in lines[1:]:
+            stripped = line.strip()
+            if stripped == "---":
+                break
+            if not stripped:
+                continue
+            if ":" not in line:
+                raise ValueError(
+                    "Unsupported YAML front matter format in SKILL.md.",
+                )
+
+            key, value = line.split(":", 1)
+            key = key.strip()
+            value = value.strip()
+            if (
+                len(value) >= 2
+                and value[0] == value[-1]
+                and value[0] in {"'", '"'}
+            ):
+                value = value[1:-1]
+            metadata[key] = value
+        else:
+            raise ValueError(
+                "The SKILL.md file must close its YAML front matter block.",
+            )
+
+        return metadata
 
     @staticmethod
     def _parse_tool_function(

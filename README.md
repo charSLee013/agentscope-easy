@@ -125,6 +125,7 @@ AgentScope-easy follows a **modular, composable architecture** with clear separa
 ## 📖 Documentation
 
 - **Tutorials**: [Quick Start](https://doc.agentscope.io/tutorial/quickstart_message.html) | [Key Concepts](https://doc.agentscope.io/tutorial/quickstart_key_concept.html)
+- **Training Example**: [RL with Trinity-RFT](./examples/training/react_agent/README.md)
 
 ## 🤝 Acknowledgment
 

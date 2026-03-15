@@ -13,6 +13,7 @@ import numpy as np
 from typing_extensions import deprecated
 
 from ._agent_meta import _AgentMeta
+from .. import _config
 from .._logging import logger
 from ..module import StateModule
 from ..message import (
@@ -201,7 +202,12 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
             f"{self.__class__.__name__} class.",
         )
 
-    async def print(self, msg: Msg, last: bool = True) -> None:
+    async def print(
+        self,
+        msg: Msg,
+        last: bool = True,
+        speech: AudioBlock | list[AudioBlock] | None = None,
+    ) -> None:
         """The function to display the message.
 
         Args:
@@ -210,9 +216,11 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
             last (`bool`, defaults to `True`):
                 Whether this is the last one in streaming messages. For
                 non-streaming message, this should always be `True`.
+            speech (`AudioBlock | list[AudioBlock] | None`, optional):
+                The audio block or blocks associated with this message.
         """
         if not self._disable_msg_queue:
-            await self.msg_queue.put((deepcopy(msg), last))
+            await self.msg_queue.put((deepcopy(msg), last, deepcopy(speech)))
             # Yield control to the event loop, allowing consumer coroutines
             # to process messages from the queue. This prevents the producer
             # from monopolizing the event loop.
@@ -226,10 +234,7 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
         thinking_and_text_to_print = []
 
         for block in msg.get_content_blocks():
-            if block["type"] == "audio":
-                self._process_audio_block(msg.id, block)
-
-            elif block["type"] == "text":
+            if block["type"] == "text":
                 self._print_text_block(
                     msg.id,
                     name_prefix=msg.name,
@@ -247,6 +252,12 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
 
             elif last:
                 self._print_last_block(block, msg)
+
+        if isinstance(speech, list):
+            for audio_block in speech:
+                self._process_audio_block(msg.id, audio_block)
+        elif isinstance(speech, dict):
+            self._process_audio_block(msg.id, speech)
 
         # Clean up resources if this is the last message in streaming
         if last and msg.id in self._stream_prefix:
@@ -278,9 +289,34 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
                 "The audio block must contain the 'source' field.",
             )
 
+        if not _config.audio_playback_enabled:
+            return
+
         if audio_block["source"]["type"] == "url":
-            # TODO: maybe download and play the audio from the URL?
-            print(json.dumps(audio_block, indent=4, ensure_ascii=False))
+            import io
+            import urllib.request
+            import wave
+            import sounddevice as sd
+
+            url = audio_block["source"]["url"]
+            try:
+                with urllib.request.urlopen(url) as response:
+                    audio_data = response.read()
+
+                with wave.open(io.BytesIO(audio_data), "rb") as wav_file:
+                    samplerate = wav_file.getframerate()
+                    n_frames = wav_file.getnframes()
+                    audio_frames = wav_file.readframes(n_frames)
+                    audio_np = np.frombuffer(audio_frames, dtype=np.int16)
+                    sd.play(audio_np, samplerate)
+                    sd.wait()
+
+            except Exception as exc:
+                logger.error(
+                    "Failed to play audio from url %s: %s",
+                    url,
+                    str(exc),
+                )
 
         elif audio_block["source"]["type"] == "base64":
             data = audio_block["source"]["data"]
@@ -370,18 +406,26 @@ class AgentBase(StateModule, metaclass=_AgentMeta):
 
     def _print_last_block(
         self,
-        block: ToolUseBlock | ToolResultBlock | ImageBlock | VideoBlock,
+        block: ToolUseBlock
+        | ToolResultBlock
+        | ImageBlock
+        | VideoBlock
+        | AudioBlock,
         msg: Msg,
     ) -> None:
         """Process and print the last content block, and the block type
-        is not audio, text, or thinking.
+        is not text or thinking.
 
         Args:
-            block (`ToolUseBlock | ToolResultBlock | ImageBlock | VideoBlock`):
+            block (`ToolUseBlock | ToolResultBlock | ImageBlock | VideoBlock \
+            | AudioBlock`):
                 The content block to be printed
             msg (`Msg`):
                 The message object
         """
+        if block.get("type") in ["image", "video", "audio"]:
+            return
+
         text_prefix = self._stream_prefix.get(msg.id, {}).get("text", "")
 
         if text_prefix:

@@ -19,10 +19,11 @@ graph TD
     DS[DashScopeChatModel]
     GE[GeminiChatModel]
     OL[OllamaChatModel]
+    TR[TrinityChatModel]
   end
   Formatter --> MB
-  MB -->|implements| OP & AN & DS & GE & OL
-  OP & AN & DS & GE & OL --> MR
+  MB -->|implements| OP & AN & DS & GE & OL & TR
+  OP & AN & DS & GE & OL & TR --> MR
   MR --> Agent
   MB --> Toolkit
   MB --> Tracing
@@ -68,6 +69,12 @@ graph TD
   - `GeminiChatModel`：封装 Google Gemini，处理文本和多模态输入/输出。
 - `src/agentscope/model/_ollama_model.py`
   - `OllamaChatModel`：本地模型接口；流式文本解析、结构化 JSON 解析通过 `_json_loads_with_repair`。
+- `src/agentscope/model/_trinity_model.py`
+  - `TrinityChatModel`：训练场景下的 OpenAI-compatible 适配器，复用
+    `OpenAIChatModel` 的非流式解析逻辑，但接收 Trinity-RFT 提供的
+    `openai_async_client` 实例并直接复用其客户端能力。
+  - 重要约束：模型模块保持 import-safe，不在模块导入阶段要求安装
+    `trinity-rft`。
 - `src/agentscope/model/_model_response.py`
   - `ChatResponse`/`ChatUsage` 数据结构（见上）。
 - `src/agentscope/model/__init__.py`
@@ -85,6 +92,7 @@ graph TD
   - `input_tokens: int`、`output_tokens: int`、`time: float`、`type: Literal["chat"]`。
 - 各模型构造函数示例：
   - `OpenAIChatModel(model_name: str, api_key: str | None = None, stream: bool = True, reasoning_effort: Literal["low","medium","high"] | None = None, organization: str | None = None, client_kwargs: dict | None = None, generate_kwargs: dict[str, JSONSerializableObject] | None = None)`.
+  - `TrinityChatModel(openai_async_client: AsyncOpenAI, generate_kwargs: dict[str, JSONSerializableObject] | None = None, enable_thinking: bool | None = None)`.
   - 其他模型有类似参数（DashScope 需要 `api_key` 与模型名；Gemini/Ollama/Anthropic 各自接受客户端配置）。
 - 异常约束
   - `_validate_tool_choice` 若传入非法字符串，将抛 `TypeError` 或 `ValueError`。
@@ -96,6 +104,8 @@ graph TD
   在结构化场景，`ChatResponse.metadata` 供 Agent 校验并写入 `Msg.metadata`。
 - **Toolkit**：若模型支持工具调用，Formatter 会提供 `tools` 列表；模型层仅负责传递和解析工具调用信息，`Toolkit.call_tool_function` 由 Agent 驱动。
 - **Tracing**：`trace_llm` 装饰器会在调用前创建 span，记录输入、输出、异常和最终的使用量。
+- **Tune**：`agentscope.tune` 使用 `TrinityChatModel` 作为训练时注入的模型
+  适配器，但模型模块自身不依赖 Trinity-RFT 的运行时导入。
 - **日志与调试**：模型层不写日志（除必要的错误信息）；建议调用方使用 Hook 或 Tracing 记录。
 - **责任边界**：
   - 不负责 Prompt 模板、不做重试或降级；
@@ -103,5 +113,5 @@ graph TD
   - 结构化输出需由调用方提供合法的 Pydantic 模型。
 
 ## 五、测试文件
-- 绑定文件：`tests/model_openai_test.py`、`tests/model_dashscope_test.py`、`tests/model_gemini_test.py`、`tests/model_anthropic_test.py`、`tests/model_ollama_test.py`
-- 覆盖点：流式/非流式解析、工具调用分片、tool_choice 校验、结构化输出 `metadata`、usage 统计。
+- 绑定文件：`tests/model_openai_test.py`、`tests/model_dashscope_test.py`、`tests/model_gemini_test.py`、`tests/model_anthropic_test.py`、`tests/model_ollama_test.py`、`tests/model_trinity_test.py`
+- 覆盖点：流式/非流式解析、工具调用分片、tool_choice 校验、结构化输出 `metadata`、usage 统计，以及 Trinity 训练客户端适配。

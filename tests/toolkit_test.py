@@ -3,6 +3,8 @@
 # pylint: disable=too-many-lines
 """Test toolkit module in agentscope."""
 import asyncio
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import time
 from copy import deepcopy
 from functools import partial
@@ -145,6 +147,27 @@ class ExtendedModelReusingBaseModel(BaseModel):
 
     another_model: MyBaseModel2 = Field(description="Reusing MyBaseModel2")
     extra_field: str = Field(description="Extra field")
+
+
+def _create_skill_dir(
+    root: str,
+    *,
+    name: str = "Analyzer",
+    description: str = "Analyze a narrow task.",
+    body: str = "# Analyzer\n",
+) -> str:
+    """Create a minimal skill directory for toolkit tests."""
+    skill_dir = Path(root) / name.lower().replace(" ", "-")
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        "---\n\n"
+        f"{body}",
+        encoding="utf-8",
+    )
+    return str(skill_dir)
 
 
 class ToolkitTest(IsolatedAsyncioTestCase):
@@ -1022,6 +1045,72 @@ class ToolkitTest(IsolatedAsyncioTestCase):
             schemas[0]["function"]["parameters"]["required"],
             ["arg1", "arg2"],
         )
+
+    async def test_register_agent_skill(self) -> None:
+        """Agent skill registration should render prompt content."""
+        with TemporaryDirectory() as tmpdir:
+            skill_dir = _create_skill_dir(
+                tmpdir,
+                name="Code Reader",
+                description="Read code paths safely.",
+            )
+
+            self.toolkit.register_agent_skill(skill_dir)
+            prompt = self.toolkit.get_agent_skill_prompt()
+
+        assert prompt is not None
+        self.assertIn("# Agent Skills", prompt)
+        self.assertIn("Code Reader", prompt)
+        self.assertIn("Read code paths safely.", prompt)
+        self.assertIn(f"{skill_dir}/SKILL.md", prompt)
+
+    async def test_register_agent_skill_errors(self) -> None:
+        """Agent skill registration should reject malformed inputs."""
+        with self.assertRaises(ValueError):
+            self.toolkit.register_agent_skill("/tmp/does-not-exist")
+
+        with TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError):
+                self.toolkit.register_agent_skill(tmpdir)
+
+            skill_dir = Path(tmpdir) / "broken"
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: Broken\n---\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                self.toolkit.register_agent_skill(str(skill_dir))
+
+            valid_dir = _create_skill_dir(tmpdir, name="Unique Skill")
+            self.toolkit.register_agent_skill(valid_dir)
+            with self.assertRaises(ValueError):
+                self.toolkit.register_agent_skill(valid_dir)
+
+    async def test_custom_agent_skill_prompt_and_remove(self) -> None:
+        """Custom skill prompt rendering should honor overrides."""
+        toolkit = Toolkit(
+            agent_skill_instruction="## Custom Skills",
+            agent_skill_template="{name}::{description}::{dir}",
+        )
+        with TemporaryDirectory() as tmpdir:
+            skill_dir = _create_skill_dir(
+                tmpdir,
+                name="Planner",
+                description="Plans the next move.",
+            )
+
+            toolkit.register_agent_skill(skill_dir)
+            prompt = toolkit.get_agent_skill_prompt()
+            assert prompt is not None
+            self.assertIn("## Custom Skills", prompt)
+            self.assertIn(
+                f"Planner::Plans the next move.::{skill_dir}",
+                prompt,
+            )
+
+            toolkit.remove_agent_skill("Planner")
+            self.assertIsNone(toolkit.get_agent_skill_prompt())
 
     async def test_register_with_json_schema_preset_kwargs_keep_other_required(
         self,

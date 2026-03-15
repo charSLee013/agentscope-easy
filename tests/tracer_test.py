@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 """Unittests for the tracing functionality in AgentScope."""
+import json
 from typing import (
     AsyncGenerator,
     Generator,
     Any,
 )
 from unittest import IsolatedAsyncioTestCase
+
+from opentelemetry import trace as trace_api
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 
 from agentscope import _config
 from agentscope.agent import AgentBase
@@ -25,6 +33,15 @@ from agentscope.tracing import (
     trace_format,
     trace_embedding,
 )
+from agentscope.tracing._attributes import (
+    OperationNameValues,
+    ProviderNameValues,
+    SpanAttributes as GenAISpanAttributes,
+)
+from agentscope.tracing._types import (
+    SpanAttributes as LegacySpanAttributes,
+    SpanKind,
+)
 
 
 class TracingTest(IsolatedAsyncioTestCase):
@@ -33,6 +50,39 @@ class TracingTest(IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         """Set up the environment"""
         _config.trace_enabled = True
+        self.prev_tracer_provider = trace_api.get_tracer_provider()
+        self.prev_raw_tracer_provider = getattr(
+            trace_api,
+            "_TRACER_PROVIDER",
+            None,
+        )
+        self.prev_tracer_provider_done = getattr(
+            trace_api._TRACER_PROVIDER_SET_ONCE,
+            "_done",
+            False,
+        )
+        self.span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(
+            SimpleSpanProcessor(self.span_exporter),
+        )
+        trace_api._TRACER_PROVIDER = None
+        trace_api._TRACER_PROVIDER_SET_ONCE._done = False
+        trace_api._set_tracer_provider(tracer_provider, False)
+
+    def _decoded_attr(self, span, key: str) -> Any:
+        """Decode JSON-serialized span attributes."""
+        value = span.attributes[key]
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
+
+    def _get_span(self, name: str):
+        """Return the named finished span."""
+        for span in self.span_exporter.get_finished_spans():
+            if span.name == name:
+                return span
+        self.fail(f"Span {name!r} not found")
 
     async def test_trace(self) -> None:
         """Test the basic tracing functionality"""
@@ -186,6 +236,14 @@ class TracingTest(IsolatedAsyncioTestCase):
                 [TextBlock(type="text", text="xxx")],
             ],
         )
+        stream_span = self._get_span("LLM.__call__")
+        self.assertEqual(
+            self._decoded_attr(
+                stream_span,
+                GenAISpanAttributes.GEN_AI_OUTPUT_MESSAGES,
+            )[0]["content"][0]["content"],
+            "xxx",
+        )
 
         non_stream_llm = LLM(False, False)
         res = await non_stream_llm([])
@@ -324,6 +382,7 @@ class TracingTest(IsolatedAsyncioTestCase):
             )
 
         toolkit.register_tool_function(gen_func)
+        self.span_exporter.clear()
         res = await toolkit.call_tool_function(
             ToolUseBlock(
                 type="tool_use",
@@ -339,6 +398,14 @@ class TracingTest(IsolatedAsyncioTestCase):
                 [TextBlock(type="text", text=f"Chunk {index}")],
             )
             index += 1
+        tool_span = self._get_span("call_tool_function")
+        self.assertIn(
+            "Chunk 1",
+            self._decoded_attr(
+                tool_span,
+                GenAISpanAttributes.GEN_AI_TOOL_CALL_RESULT,
+            ),
+        )
 
         res = await toolkit.call_tool_function(
             ToolUseBlock(
@@ -376,6 +443,156 @@ class TracingTest(IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await model(True)
 
+    async def test_remaining_tracing_decorators_emit_dual_attributes(
+        self,
+    ) -> None:
+        """Generic, formatter, and embedding spans keep both attr layers."""
+
+        @trace(name="generic_stream")
+        async def generic_stream() -> AsyncGenerator[str, None]:
+            for chunk in ("first", "last"):
+                yield chunk
+
+        class OpenAIChatFormatter(FormatterBase):
+            @trace_format
+            async def format(self) -> list[dict]:
+                return [{"role": "user", "content": "Hello, world!"}]
+
+        class OpenAIEmbeddingModel(EmbeddingModelBase):
+            def __init__(self) -> None:
+                super().__init__("embed-small", 1024)
+
+            @trace_embedding
+            async def __call__(self) -> list[list[float]]:
+                return [[0.0, 1.0, 2.0]]
+
+        self.span_exporter.clear()
+        formatter = OpenAIChatFormatter()
+        embedding_model = OpenAIEmbeddingModel()
+
+        generic_result = [_ async for _ in generic_stream()]
+        formatter_result = await formatter.format()
+        embedding_result = await embedding_model()
+
+        self.assertEqual(generic_result, ["first", "last"])
+        self.assertEqual(
+            formatter_result,
+            [{"role": "user", "content": "Hello, world!"}],
+        )
+        self.assertEqual(embedding_result, [[0.0, 1.0, 2.0]])
+
+        generic_span = self._get_span("generic_stream")
+        self.assertEqual(
+            self._decoded_attr(
+                generic_span,
+                LegacySpanAttributes.SPAN_KIND,
+            ),
+            SpanKind.COMMON.value,
+        )
+        self.assertEqual(
+            generic_span.attributes[GenAISpanAttributes.GEN_AI_OPERATION_NAME],
+            OperationNameValues.INVOKE_GENERIC_FUNCTION,
+        )
+        self.assertEqual(
+            generic_span.attributes[
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_NAME
+            ],
+            "generic_stream",
+        )
+        self.assertEqual(
+            self._decoded_attr(
+                generic_span,
+                GenAISpanAttributes.AGENTSCOPE_FUNCTION_OUTPUT,
+            ),
+            "last",
+        )
+        self.assertEqual(
+            self._decoded_attr(
+                generic_span,
+                LegacySpanAttributes.OUTPUT,
+            ),
+            "last",
+        )
+
+        formatter_span = self._get_span("OpenAIChatFormatter.format")
+        self.assertEqual(
+            self._decoded_attr(
+                formatter_span,
+                LegacySpanAttributes.SPAN_KIND,
+            ),
+            SpanKind.FORMATTER.value,
+        )
+        self.assertEqual(
+            formatter_span.attributes[
+                GenAISpanAttributes.GEN_AI_OPERATION_NAME
+            ],
+            OperationNameValues.FORMATTER,
+        )
+        self.assertEqual(
+            formatter_span.attributes[
+                GenAISpanAttributes.AGENTSCOPE_FORMAT_TARGET
+            ],
+            ProviderNameValues.OPENAI,
+        )
+        self.assertEqual(
+            formatter_span.attributes[
+                GenAISpanAttributes.AGENTSCOPE_FORMAT_COUNT
+            ],
+            1,
+        )
+        self.assertEqual(
+            self._decoded_attr(
+                formatter_span,
+                LegacySpanAttributes.OUTPUT,
+            ),
+            formatter_result,
+        )
+
+        embedding_span = self._get_span("OpenAIEmbeddingModel.__call__")
+        self.assertEqual(
+            self._decoded_attr(
+                embedding_span,
+                LegacySpanAttributes.SPAN_KIND,
+            ),
+            SpanKind.EMBEDDING.value,
+        )
+        self.assertEqual(
+            embedding_span.attributes[
+                GenAISpanAttributes.GEN_AI_OPERATION_NAME
+            ],
+            OperationNameValues.EMBEDDINGS,
+        )
+        self.assertEqual(
+            embedding_span.attributes[
+                GenAISpanAttributes.GEN_AI_PROVIDER_NAME
+            ],
+            ProviderNameValues.OPENAI,
+        )
+        self.assertEqual(
+            embedding_span.attributes[
+                GenAISpanAttributes.GEN_AI_REQUEST_MODEL
+            ],
+            "embed-small",
+        )
+        self.assertEqual(
+            self._decoded_attr(
+                embedding_span,
+                LegacySpanAttributes.META,
+            ),
+            {"model_name": "embed-small"},
+        )
+        self.assertEqual(
+            self._decoded_attr(
+                embedding_span,
+                LegacySpanAttributes.OUTPUT,
+            ),
+            embedding_result,
+        )
+
     async def asyncTearDown(self) -> None:
         """Tear down the environment"""
         _config.trace_enabled = True
+        trace_api._TRACER_PROVIDER = self.prev_raw_tracer_provider
+        trace_api._TRACER_PROVIDER_SET_ONCE._done = (
+            self.prev_tracer_provider_done
+        )
