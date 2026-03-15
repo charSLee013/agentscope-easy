@@ -53,6 +53,27 @@ AgentScope 当前的实现包括：
 我们将构建一个简单的玩学问题基准测试来演示如何使用 AgentScope 评估模块。
 """
 
+import asyncio
+import os
+from typing import Callable, Generator
+
+from pydantic import BaseModel
+
+from agentscope.agent import ReActAgent
+from agentscope.evaluate import (
+    BenchmarkBase,
+    FileEvaluatorStorage,
+    GeneralEvaluator,
+    MetricBase,
+    MetricResult,
+    MetricType,
+    SolutionOutput,
+    Task,
+)
+from agentscope.formatter import DashScopeChatFormatter
+from agentscope.message import Msg
+from agentscope.model import DashScopeChatModel
+
 TOY_BENCHMARK = [
     {
         "id": "math_problem_1",
@@ -81,13 +102,6 @@ TOY_BENCHMARK = [
 # - 一个 ``SolutionOutput`` (Agent解决方案输出) 包含智能体生成的所有信息，包括轨迹和最终输出。
 # - 一个 ``Metric`` (评测指标) 代表一个单一的评估可调用实例，它将生成的解决方案（例如，轨迹或最终输出）与标准答案进行比较。
 # 在这个示例中，我们定义了一个指标，简单地检查解决方案中的 ``output`` 字段是否与标准答案匹配。
-
-from agentscope.evaluate import (
-    SolutionOutput,
-    MetricBase,
-    MetricResult,
-    MetricType,
-)
 
 
 class CheckEqual(MetricBase):
@@ -124,12 +138,6 @@ class CheckEqual(MetricBase):
 # %%
 # - 一个 ``Task`` (任务) 是基准测试中的一个单元，包含智能体执行和评估所需的所有信息（例如，输入/查询及其标准答案）。
 # - 一个 ``Benchmark`` (基准测试) 组织多个任务进行系统性评估。
-
-from typing import Generator
-from agentscope.evaluate import (
-    Task,
-    BenchmarkBase,
-)
 
 
 class ToyBenchmark(BenchmarkBase):
@@ -184,22 +192,6 @@ class ToyBenchmark(BenchmarkBase):
 # 基准测试，开发者希望通过并行化更高效地进行评估，
 # ``RayEvaluator`` (Ray评估器) 也可作为内置解决方案使用。原生 Windows
 # 环境请通过 WSL2 运行。
-
-
-import os
-import asyncio
-from typing import Callable
-from pydantic import BaseModel
-
-from agentscope.message import Msg
-from agentscope.model import DashScopeChatModel
-from agentscope.formatter import DashScopeChatFormatter
-from agentscope.agent import ReActAgent
-
-from agentscope.evaluate import (
-    GeneralEvaluator,
-    FileEvaluatorStorage,
-)
 
 
 class ToyBenchAnswerFormat(BaseModel):

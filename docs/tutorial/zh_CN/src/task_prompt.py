@@ -149,10 +149,12 @@ AgentScope 内置的格式化器如下所列
 以 DashScope 为例，格式化后的消息将如下所示：
 """
 
-from agentscope.token import HuggingFaceTokenCounter
+import asyncio
+import json
+
 from agentscope.formatter import DashScopeMultiAgentFormatter
 from agentscope.message import Msg, ToolResultBlock, ToolUseBlock, TextBlock
-import asyncio, json
+from agentscope.token import HuggingFaceTokenCounter
 
 
 input_msgs = [
@@ -269,6 +271,9 @@ async def run_token_counter() -> int:
 # %%
 # 然后我们将最大 token 限制设置为比总 token 数少 20 个，并运行格式化器。
 #
+
+n_tokens = asyncio.run(run_token_counter())
+print("截断前的 token 数量：", n_tokens)
 
 
 async def run_truncated_formatter() -> None:

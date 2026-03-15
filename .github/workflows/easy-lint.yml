@@ -27,6 +27,8 @@ jobs:
       - name: Ruff (syntax/style)
         run: ruff check src
 
+      - name: Ruff (tutorial docs)
+        run: ruff check docs/tutorial/en/src docs/tutorial/zh_CN/src
+
       - name: Pylint (errors only)
         run: pylint -E src
-

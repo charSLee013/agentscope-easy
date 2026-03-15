@@ -149,10 +149,12 @@ Therefore, we have to merge the conversation history into a single user message 
 Taking DashScope as an example, the formatted message will look like this:
 """
 
-from agentscope.token import HuggingFaceTokenCounter
+import asyncio
+import json
+
 from agentscope.formatter import DashScopeMultiAgentFormatter
 from agentscope.message import Msg, ToolResultBlock, ToolUseBlock, TextBlock
-import asyncio, json
+from agentscope.token import HuggingFaceTokenCounter
 
 
 input_msgs = [
@@ -269,6 +271,9 @@ async def run_token_counter() -> int:
 # %%
 # Then we set the maximum token limit to 20 tokens less than the total number of tokens and run the formatter.
 #
+
+n_tokens = asyncio.run(run_token_counter())
+print("The tokens before truncation: ", n_tokens)
 
 
 async def run_truncated_formatter() -> None:

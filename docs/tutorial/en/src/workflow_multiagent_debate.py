@@ -20,7 +20,6 @@ from pydantic import Field, BaseModel
 from agentscope.agent import ReActAgent
 from agentscope.formatter import (
     DashScopeMultiAgentFormatter,
-    DashScopeChatFormatter,
 )
 from agentscope.message import Msg
 from agentscope.model import DashScopeChatModel

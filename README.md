@@ -81,6 +81,8 @@ Native support for interruption handling with robust memory preservation.
 git clone -b easy https://github.com/charSLee013/agentscope-easy.git
 cd agentscope-easy
 pip install -e .[dev]
+# or
+# uv pip install -e .[dev]
 ```
 
 ### Hello AgentScope-easy!
