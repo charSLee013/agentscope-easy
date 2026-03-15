@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 from types import ModuleType, SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any, Dict, Mapping
 from unittest import TestCase
 from unittest.mock import patch
 
-from agentscope.model import OpenAIChatModel, TrinityChatModel
+from agentscope.model import TrinityChatModel
 from agentscope.tune import tune
 from agentscope.tune._workflow import _validate_function_signature
 
@@ -18,46 +18,61 @@ async def correct_interface(task: Dict, model: TrinityChatModel) -> float:
     return task["reward"]
 
 
+async def renamed_interface(payload: Mapping[str, Any], runner) -> str:
+    """Renamed parameters and loose hints should still be accepted."""
+    return str(payload["reward"])
+
+
+async def optional_extra_interface(
+    task: Dict,
+    model: TrinityChatModel,
+    retries: int = 1,
+) -> float:
+    """Optional parameters beyond the first two are allowed."""
+    del model, retries
+    return float(task["reward"])
+
+
+async def kwargs_interface(task, model, **kwargs: Any) -> float:
+    """A kwargs catch-all should still satisfy the bridge contract."""
+    del model, kwargs
+    return float(task["reward"])
+
+
 async def wrong_interface_1(
     task: Dict,
     model: TrinityChatModel,
     extra: Any,
 ) -> float:
-    """Wrong interface with an extra argument."""
+    """A third required argument is not allowed."""
+    del task, model, extra
     return 0.0
 
 
 async def wrong_interface_2(task: Dict) -> float:
-    """Wrong interface with a missing argument."""
+    """A missing model argument is invalid."""
+    del task
     return 0.0
 
 
-async def wrong_interface_3(task: List, model: TrinityChatModel) -> float:
-    """Wrong interface with a wrong task type."""
+def sync_interface(task: Dict, model: TrinityChatModel) -> float:
+    """Sync workflow functions are invalid."""
+    del task, model
     return 0.0
-
-
-async def wrong_interface_4(task: Dict, model: OpenAIChatModel) -> float:
-    """Wrong interface with a wrong model type."""
-    return 0.0
-
-
-async def wrong_interface_5(task: Dict, model: TrinityChatModel) -> str:
-    """Wrong interface with a wrong return type."""
-    return "0.0"
 
 
 class AgentTuneTest(TestCase):
     """Test AgentScope training helpers."""
 
     def test_workflow_interface_validate(self) -> None:
-        """Workflow signature validation should be strict."""
+        """Workflow signature validation should enforce callable semantics."""
         self.assertTrue(_validate_function_signature(correct_interface))
+        self.assertTrue(_validate_function_signature(renamed_interface))
+        self.assertTrue(_validate_function_signature(optional_extra_interface))
+        self.assertTrue(_validate_function_signature(kwargs_interface))
         self.assertFalse(_validate_function_signature(wrong_interface_1))
         self.assertFalse(_validate_function_signature(wrong_interface_2))
-        self.assertFalse(_validate_function_signature(wrong_interface_3))
-        self.assertFalse(_validate_function_signature(wrong_interface_4))
-        self.assertFalse(_validate_function_signature(wrong_interface_5))
+        self.assertFalse(_validate_function_signature(sync_interface))
 
     def test_tune_requires_trinity_runtime(self) -> None:
         """Calling tune() without Trinity-RFT should raise a clear error."""
@@ -87,7 +102,10 @@ class AgentTuneTest(TestCase):
                 return {"config_path": path}
 
             @staticmethod
-            def merge(schema: type, yaml_config: dict[str, str]) -> dict[str, Any]:
+            def merge(
+                schema: type,
+                yaml_config: dict[str, str],
+            ) -> dict[str, Any]:
                 return {"schema": schema, "yaml_config": yaml_config}
 
             @staticmethod

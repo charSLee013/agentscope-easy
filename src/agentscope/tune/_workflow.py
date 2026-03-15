@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Awaitable, Callable, Dict, get_type_hints
+from typing import Awaitable, Callable, Dict
 
 from .._logging import logger
 from ..model import TrinityChatModel
@@ -17,46 +17,27 @@ def _validate_function_signature(func: Callable) -> bool:
         logger.warning("The workflow function is not asynchronous.")
         return False
 
-    expected_params = [
-        ("task", Dict),
-        ("model", TrinityChatModel),
-    ]
-    expected_return = float
-
     func_signature = inspect.signature(func)
-    func_hints = get_type_hints(func)
+    parameters = list(func_signature.parameters.values())
 
-    if len(func_signature.parameters) != len(expected_params):
+    try:
+        func_signature.bind_partial({}, TrinityChatModel)
+    except TypeError:
         logger.warning(
-            "Expected %d parameters, but got %d",
-            len(expected_params),
-            len(func_signature.parameters),
+            "The workflow must accept at least two positional arguments.",
         )
         return False
 
-    for (param_name, _), (expected_name, expected_type) in zip(
-        func_signature.parameters.items(),
-        expected_params,
-    ):
-        if (
-            param_name != expected_name
-            or func_hints.get(param_name) != expected_type
+    for param in parameters[2:]:
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
         ):
+            continue
+        if param.default is inspect.Parameter.empty:
             logger.warning(
-                "Expected parameter %s of type %s, but got %s of type %s",
-                expected_name,
-                expected_type,
-                param_name,
-                func_hints.get(param_name),
+                "The workflow cannot require parameters beyond the first two.",
             )
             return False
-
-    if func_hints.get("return") != expected_return:
-        logger.warning(
-            "Expected return type %s, but got %s",
-            expected_return,
-            func_hints.get("return"),
-        )
-        return False
 
     return True

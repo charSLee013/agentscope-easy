@@ -29,9 +29,10 @@ graph TD
 ```
 
 ### 3. 核心组件逻辑
-- `WorkflowType`：定义训练 workflow 的标准函数签名。
-- `_validate_function_signature()`：检查函数是否为 async、参数名和类型是否
-  匹配 `task` / `model`、返回值是否标注为 `float`。
+- `WorkflowType`：定义训练 workflow 的推荐标准函数签名。
+- `_validate_function_signature()`：检查函数是否为 async、是否至少能接受
+  两个位置参数，以及是否存在第三个必填参数；参数名和类型注解只作为推荐
+  形态，不作为硬拒绝条件。
 - `tune()`：
   - 延迟导入 `trinity-rft` 与 `omegaconf`。
   - 校验 workflow 契约。
@@ -65,11 +66,15 @@ graph TD
 
 ## 三、关键数据结构与对外接口（含类型/返回约束）
 - `WorkflowType = Callable[[Dict, TrinityChatModel], Awaitable[float]]`
-  - `task`：训练样本字典。
-  - `model`：训练期注入的模型适配器。
-  - 返回：标量 reward。
+  - 这是推荐工作流形态，不是 `_validate_function_signature()` 的精确匹配
+    模板。
+  - 推荐参数：
+    - `task`：训练样本字典。
+    - `model`：训练期注入的模型适配器。
+  - 推荐返回：标量 reward。
 - `tune(workflow_func: WorkflowType, config_path: str) -> None`
-  - `workflow_func`：必须满足 `WorkflowType`。
+  - `workflow_func`：必须是 async workflow，且能接受两个位置参数，不得
+    额外要求第三个必填参数。
   - `config_path`：Trinity-RFT YAML 配置文件路径。
   - 异常：
     - 缺少 `trinity-rft` / `omegaconf` 时抛 `ImportError`。

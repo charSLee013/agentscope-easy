@@ -4,7 +4,11 @@ from typing import Any
 
 from .. import _config
 from ..message import Msg, ToolUseBlock
-from ._attributes import OperationNameValues, ProviderNameValues, SpanAttributes
+from ._attributes import (
+    OperationNameValues,
+    ProviderNameValues,
+    SpanAttributes,
+)
 from ._converter import _convert_block_to_part
 from ._utils import _serialize_to_str
 
@@ -192,9 +196,7 @@ def _get_llm_response_attributes(response: Any) -> dict[str, Any]:
                     "content": [
                         part
                         for block in content
-                        if (
-                            part := _convert_block_to_part(block)
-                        ) is not None
+                        if (part := _convert_block_to_part(block)) is not None
                     ],
                 },
             ],

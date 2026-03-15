@@ -7,7 +7,7 @@ workflow surface close to ordinary AgentScope code.
 
 ## Workflow contract
 
-To be trainable, a workflow should have this signature:
+The recommended workflow shape is:
 
 ```python
 from typing import Dict
@@ -19,9 +19,10 @@ async def workflow_function(task: Dict, model: TrinityChatModel) -> float:
     """Run one task and return a scalar reward."""
 ```
 
-- `task`: one sample from the training dataset.
-- `model`: an OpenAI-compatible client adapter injected by Trinity-RFT.
-- return value: a scalar reward for the finished rollout.
+- The bridge validates callability, not exact parameter names or annotations.
+- In practice, keep the workflow as `async def` and make sure it can accept two
+  positional arguments: a task object and the injected training-time model.
+- Returning a scalar reward is still the recommended contract.
 
 ## Example
 

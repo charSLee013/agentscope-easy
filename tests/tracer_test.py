@@ -236,6 +236,14 @@ class TracingTest(IsolatedAsyncioTestCase):
                 [TextBlock(type="text", text="xxx")],
             ],
         )
+        stream_span = self._get_span("LLM.__call__")
+        self.assertEqual(
+            self._decoded_attr(
+                stream_span,
+                GenAISpanAttributes.GEN_AI_OUTPUT_MESSAGES,
+            )[0]["content"][0]["content"],
+            "xxx",
+        )
 
         non_stream_llm = LLM(False, False)
         res = await non_stream_llm([])
@@ -374,6 +382,7 @@ class TracingTest(IsolatedAsyncioTestCase):
             )
 
         toolkit.register_tool_function(gen_func)
+        self.span_exporter.clear()
         res = await toolkit.call_tool_function(
             ToolUseBlock(
                 type="tool_use",
@@ -389,6 +398,14 @@ class TracingTest(IsolatedAsyncioTestCase):
                 [TextBlock(type="text", text=f"Chunk {index}")],
             )
             index += 1
+        tool_span = self._get_span("call_tool_function")
+        self.assertIn(
+            "Chunk 1",
+            self._decoded_attr(
+                tool_span,
+                GenAISpanAttributes.GEN_AI_TOOL_CALL_RESULT,
+            ),
+        )
 
         res = await toolkit.call_tool_function(
             ToolUseBlock(

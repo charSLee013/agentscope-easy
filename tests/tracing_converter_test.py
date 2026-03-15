@@ -2,7 +2,12 @@
 """Tracing converter tests."""
 from unittest import TestCase
 
-from agentscope.message import AudioBlock, ImageBlock, TextBlock, ToolResultBlock
+from agentscope.message import (
+    AudioBlock,
+    ImageBlock,
+    TextBlock,
+    ToolResultBlock,
+)
 from agentscope.tracing._converter import _convert_block_to_part
 
 
@@ -41,7 +46,11 @@ class TracingConverterTest(TestCase):
         audio_part = _convert_block_to_part(
             AudioBlock(
                 type="audio",
-                source={"type": "base64", "data": "abc", "media_type": "audio/wav"},
+                source={
+                    "type": "base64",
+                    "data": "abc",
+                    "media_type": "audio/wav",
+                },
             ),
         )
 

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """The tracing decorators for agent, formatter, toolkit, chat and embedding
 models."""
+import json
 import inspect
 from functools import wraps
 from typing import (
@@ -131,6 +132,11 @@ def _stream_response_attributes(span: Span, chunk: Any) -> dict[str, Any]:
     span_kind = getattr(span, "attributes", {}).get(
         LegacySpanAttributes.SPAN_KIND,
     )
+    if isinstance(span_kind, str):
+        try:
+            span_kind = json.loads(span_kind)
+        except json.JSONDecodeError:
+            pass
 
     if span_kind == SpanKind.LLM.value:
         return _get_llm_response_attributes(chunk)
