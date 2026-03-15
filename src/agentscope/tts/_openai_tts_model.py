@@ -92,33 +92,33 @@ class OpenAITTSModel(TTSModelBase):
         response: "HttpxBinaryResponseContent",
     ) -> AsyncGenerator[TTSResponse, None]:
         """Parse the OpenAI streaming response."""
-        audio_base64 = ""
+        audio_bytes = bytearray()
         async with response as stream:
             async for chunk in stream.iter_bytes():
                 if not chunk:
                     continue
-                audio_base64 = base64.b64encode(chunk).decode("utf-8")
+                audio_bytes.extend(chunk)
                 yield TTSResponse(
                     content=AudioBlock(
                         type="audio",
                         source=Base64Source(
                             type="base64",
-                            data=audio_base64,
+                            data=base64.b64encode(audio_bytes).decode("utf-8"),
                             media_type="audio/pcm",
                         ),
                     ),
                     is_last=False,
                 )
 
-        yield TTSResponse(
-            content=AudioBlock(
-                type="audio",
-                source=Base64Source(
-                    type="base64",
-                    data=audio_base64,
-                    media_type="audio/pcm",
+        if audio_bytes:
+            yield TTSResponse(
+                content=AudioBlock(
+                    type="audio",
+                    source=Base64Source(
+                        type="base64",
+                        data=base64.b64encode(audio_bytes).decode("utf-8"),
+                        media_type="audio/pcm",
+                    ),
                 ),
-            ),
-            is_last=True,
-        )
-
+                is_last=True,
+            )

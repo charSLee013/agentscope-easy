@@ -280,7 +280,9 @@ class DashScopeRealtimeTTSModelTest(IsolatedAsyncioTestCase):
             callback = callback_cls()
 
             callback.on_event({"type": "session.created"})
-            callback.on_event({"type": "response.audio.delta", "delta": b"abc"})
+            callback.on_event(
+                {"type": "response.audio.delta", "delta": b"abc"},
+            )
             response = await callback.get_audio_data(block=False)
             self.assertEqual(response.content["source"]["data"], "YWJj")
 
@@ -450,7 +452,9 @@ class DashScopeTTSModelTest(IsolatedAsyncioTestCase):
         )
         self.assertTrue(chunks[2].is_last)
 
-    async def test_synthesize_handles_none_empty_and_sparse_chunks(self) -> None:
+    async def test_synthesize_handles_none_empty_and_sparse_chunks(
+        self,
+    ) -> None:
         """DashScope TTS should handle no text and sparse output chunks."""
         model = DashScopeTTSModel(
             api_key=self.api_key,

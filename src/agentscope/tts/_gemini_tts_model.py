@@ -75,7 +75,9 @@ class GeminiTTSModel(TTSModelBase):
         }
 
         if self.stream:
-            response = self._client.models.generate_content_stream(**api_kwargs)
+            response = self._client.models.generate_content_stream(
+                **api_kwargs,
+            )
             return self._parse_into_async_generator(response)
 
         response = self._client.models.generate_content(**api_kwargs)
@@ -85,7 +87,9 @@ class GeminiTTSModel(TTSModelBase):
             and response.candidates[0].content.parts
             and response.candidates[0].content.parts[0].inline_data
         ):
-            audio_data = response.candidates[0].content.parts[0].inline_data.data
+            audio_data = (
+                response.candidates[0].content.parts[0].inline_data.data
+            )
             mime_type = (
                 response.candidates[0].content.parts[0].inline_data.mime_type
             )
@@ -116,21 +120,36 @@ class GeminiTTSModel(TTSModelBase):
         response: Iterator["GenerateContentResponse"],
     ) -> AsyncGenerator[TTSResponse, None]:
         """Parse Gemini streaming response."""
-        audio_data = ""
+        audio_bytes = bytearray()
+        mime_type = "audio/pcm;rate=24000"
         for chunk in response:
-            chunk_audio_data = chunk.candidates[0].content.parts[0].inline_data.data
-            mime_type = chunk.candidates[0].content.parts[0].inline_data.mime_type
-            chunk_audio_base64 = base64.b64encode(chunk_audio_data).decode("utf-8")
-            audio_data += chunk_audio_base64
+            chunk_audio_data = (
+                chunk.candidates[0].content.parts[0].inline_data.data
+            )
+            mime_type = (
+                chunk.candidates[0].content.parts[0].inline_data.mime_type
+            )
+            audio_bytes.extend(chunk_audio_data)
             yield TTSResponse(
                 content=AudioBlock(
                     type="audio",
                     source=Base64Source(
                         type="base64",
-                        data=audio_data,
+                        data=base64.b64encode(audio_bytes).decode("utf-8"),
                         media_type=mime_type,
                     ),
                 ),
+                is_last=False,
             )
-        yield TTSResponse(content=None)
-
+        if audio_bytes:
+            yield TTSResponse(
+                content=AudioBlock(
+                    type="audio",
+                    source=Base64Source(
+                        type="base64",
+                        data=base64.b64encode(audio_bytes).decode("utf-8"),
+                        media_type=mime_type,
+                    ),
+                ),
+                is_last=True,
+            )

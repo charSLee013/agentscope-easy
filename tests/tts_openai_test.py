@@ -49,7 +49,9 @@ class OpenAITTSModelTest(IsolatedAsyncioTestCase):
         )
         mock_response = Mock()
         mock_response.content = self.mock_audio_bytes
-        model._client.audio.speech.create = AsyncMock(return_value=mock_response)
+        model._client.audio.speech.create = AsyncMock(
+            return_value=mock_response,
+        )
 
         msg = Msg(name="user", content="Hello! Test message.", role="user")
         response = await model.synthesize(msg)
@@ -92,6 +94,7 @@ class OpenAITTSModelTest(IsolatedAsyncioTestCase):
         self.assertIsInstance(response, AsyncGenerator)
         chunks = [chunk async for chunk in response]
         self.assertEqual(len(chunks), 3)
+        self.assertFalse(chunks[0].is_last)
         self.assertEqual(
             chunks[0].content,
             AudioBlock(
@@ -109,14 +112,28 @@ class OpenAITTSModelTest(IsolatedAsyncioTestCase):
                 type="audio",
                 source=Base64Source(
                     type="base64",
-                    data=base64.b64encode(chunk2).decode("utf-8"),
+                    data=base64.b64encode(chunk1 + chunk2).decode("utf-8"),
+                    media_type="audio/pcm",
+                ),
+            ),
+        )
+        self.assertEqual(chunks[1].is_last, False)
+        self.assertEqual(
+            chunks[2].content,
+            AudioBlock(
+                type="audio",
+                source=Base64Source(
+                    type="base64",
+                    data=base64.b64encode(chunk1 + chunk2).decode("utf-8"),
                     media_type="audio/pcm",
                 ),
             ),
         )
         self.assertTrue(chunks[2].is_last)
 
-    async def test_synthesize_returns_empty_for_none_or_empty_text(self) -> None:
+    async def test_synthesize_returns_empty_for_none_or_empty_text(
+        self,
+    ) -> None:
         """None and empty text should short-circuit without API calls."""
         model = OpenAITTSModel(
             api_key=self.api_key,

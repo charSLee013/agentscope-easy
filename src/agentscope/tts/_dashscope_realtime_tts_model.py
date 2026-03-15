@@ -130,7 +130,8 @@ class DashScopeRealtimeTTSModel(TTSModelBase):
         self,
         api_key: str,
         model_name: str = "qwen3-tts-flash-realtime",
-        voice: Literal["Cherry", "Nofish", "Ethan", "Jennifer"] | str = "Cherry",
+        voice: Literal["Cherry", "Nofish", "Ethan", "Jennifer"]
+        | str = "Cherry",
         stream: bool = True,
         cold_start_length: int | None = None,
         cold_start_words: int | None = None,
@@ -237,7 +238,10 @@ class DashScopeRealtimeTTSModel(TTSModelBase):
         if msg is None:
             delta_to_send = ""
         else:
-            if self._current_msg_id is not None and self._current_msg_id != msg.id:
+            if (
+                self._current_msg_id is not None
+                and self._current_msg_id != msg.id
+            ):
                 raise RuntimeError(
                     "DashScopeRealtimeTTSModel can only handle one streaming "
                     "input request at a time.",
@@ -264,4 +268,3 @@ class DashScopeRealtimeTTSModel(TTSModelBase):
         self._first_send = True
         self._current_prefix = ""
         return result
-

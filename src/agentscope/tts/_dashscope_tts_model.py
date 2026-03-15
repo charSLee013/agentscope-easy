@@ -27,7 +27,8 @@ class DashScopeTTSModel(TTSModelBase):
         self,
         api_key: str,
         model_name: str = "qwen3-tts-flash",
-        voice: Literal["Cherry", "Serena", "Ethan", "Chelsie"] | str = "Cherry",
+        voice: Literal["Cherry", "Serena", "Ethan", "Chelsie"]
+        | str = "Cherry",
         language_type: str = "Auto",
         stream: bool = True,
         generate_kwargs: dict[str, JSONSerializableObject] | None = None,

@@ -33,4 +33,3 @@ class TTSResponse(DictMixin):
         default_factory=lambda: None,
     )
     is_last: bool = True
-

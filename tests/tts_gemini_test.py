@@ -79,7 +79,9 @@ class GeminiTTSModelTest(IsolatedAsyncioTestCase):
             self.mock_audio_bytes,
             self.mock_mime_type,
         )
-        model._client.models.generate_content = Mock(return_value=mock_response)
+        model._client.models.generate_content = Mock(
+            return_value=mock_response,
+        )
 
         msg = Msg(name="user", content="Hello! Test message.", role="user")
         response = await model.synthesize(msg)
@@ -122,7 +124,9 @@ class GeminiTTSModelTest(IsolatedAsyncioTestCase):
         self.assertEqual(len(chunks), 3)
 
         chunk1_base64 = base64.b64encode(chunk1_data).decode("utf-8")
-        chunk2_base64 = base64.b64encode(chunk2_data).decode("utf-8")
+        full_base64 = base64.b64encode(chunk1_data + chunk2_data).decode(
+            "utf-8",
+        )
         self.assertEqual(
             chunks[0].content,
             AudioBlock(
@@ -134,20 +138,35 @@ class GeminiTTSModelTest(IsolatedAsyncioTestCase):
                 ),
             ),
         )
+        self.assertFalse(chunks[0].is_last)
         self.assertEqual(
             chunks[1].content,
             AudioBlock(
                 type="audio",
                 source=Base64Source(
                     type="base64",
-                    data=chunk1_base64 + chunk2_base64,
+                    data=full_base64,
                     media_type=self.mock_mime_type,
                 ),
             ),
         )
-        self.assertIsNone(chunks[2].content)
+        self.assertFalse(chunks[1].is_last)
+        self.assertEqual(
+            chunks[2].content,
+            AudioBlock(
+                type="audio",
+                source=Base64Source(
+                    type="base64",
+                    data=full_base64,
+                    media_type=self.mock_mime_type,
+                ),
+            ),
+        )
+        self.assertTrue(chunks[2].is_last)
 
-    async def test_synthesize_returns_empty_for_none_or_empty_text(self) -> None:
+    async def test_synthesize_returns_empty_for_none_or_empty_text(
+        self,
+    ) -> None:
         """None and empty text should short-circuit without API calls."""
         model = GeminiTTSModel(
             api_key=self.api_key,
@@ -174,7 +193,9 @@ class GeminiTTSModelTest(IsolatedAsyncioTestCase):
         )
         mock_response = MagicMock()
         mock_response.candidates = []
-        model._client.models.generate_content = Mock(return_value=mock_response)
+        model._client.models.generate_content = Mock(
+            return_value=mock_response,
+        )
 
         response = await model.synthesize(
             Msg(name="user", content="fallback", role="user"),

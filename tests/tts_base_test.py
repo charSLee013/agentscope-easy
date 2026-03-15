@@ -42,7 +42,9 @@ class _NonRealtimeBaseProbe(TTSModelBase):
 class TTSModelBaseTest(IsolatedAsyncioTestCase):
     """Tests for common TTS model base behavior."""
 
-    async def test_async_context_connects_and_closes_streaming_models(self) -> None:
+    async def test_async_context_connects_and_closes_streaming_models(
+        self,
+    ) -> None:
         """Streaming-capable models should connect and close via context."""
         probe = _StreamingBaseProbe()
 
@@ -64,3 +66,16 @@ class TTSModelBaseTest(IsolatedAsyncioTestCase):
 
         with self.assertRaises(NotImplementedError):
             await probe.push(msg)
+
+    async def test_tts_response_prefers_instance_values_for_default_fields(
+        self,
+    ) -> None:
+        """DictMixin-backed responses should expose overridden field values."""
+        response = TTSResponse(
+            content=None,
+            metadata={"source": "test"},
+            is_last=False,
+        )
+
+        self.assertEqual(response.metadata, {"source": "test"})
+        self.assertFalse(response.is_last)

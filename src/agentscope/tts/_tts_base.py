@@ -66,4 +66,3 @@ class TTSModelBase(ABC):
         **kwargs: Any,
     ) -> TTSResponse | AsyncGenerator[TTSResponse, None]:
         """Synthesize speech from text."""
-
