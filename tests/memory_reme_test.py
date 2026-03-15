@@ -136,7 +136,10 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
         )
 
         self.assertIsInstance(record_result, ToolResponse)
-        self.assertIn("Successfully recorded 1", record_result.content[0]["text"])
+        self.assertIn(
+            "Successfully recorded 1",
+            record_result.content[0]["text"],
+        )
         self.assertIn("Hangzhou", retrieve_result.content[0]["text"])
 
     async def test_task_record_and_retrieve_flow(self) -> None:
@@ -157,7 +160,10 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
             keywords=["Python"],
         )
 
-        self.assertIn("Successfully recorded 1 task", record_result.content[0]["text"])
+        self.assertIn(
+            "Successfully recorded 1 task",
+            record_result.content[0]["text"],
+        )
         self.assertIn("EXPLAIN ANALYZE", retrieve_result.content[0]["text"])
 
     async def test_tool_record_and_retrieve_flow(self) -> None:
@@ -192,7 +198,10 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
             keywords=["search_web"],
         )
 
-        self.assertIn("Successfully recorded 1 tool execution", record_result.content[0]["text"])
+        self.assertIn(
+            "Successfully recorded 1 tool execution",
+            record_result.content[0]["text"],
+        )
         self.assertIn("search_web", retrieve_result.content[0]["text"])
 
     async def test_tool_record_returns_friendly_message_for_invalid_json(
@@ -212,7 +221,9 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
             "No valid tool call results to record.",
         )
 
-    async def test_direct_record_and_retrieve_require_started_context(self) -> None:
+    async def test_direct_record_and_retrieve_require_started_context(
+        self,
+    ) -> None:
         """Direct APIs should fail fast before context start."""
         memory = self._make_memory(ReMePersonalLongTermMemory)
         msg = Msg("user", "hello", "user")
@@ -243,8 +254,14 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result, "Relevant task memory.")
-        self.assertEqual(memory.app.async_execute.call_args_list[0][1]["name"], "summary_task_memory")
-        self.assertEqual(memory.app.async_execute.call_args_list[1][1]["name"], "retrieve_task_memory")
+        self.assertEqual(
+            memory.app.async_execute.call_args_list[0][1]["name"],
+            "summary_task_memory",
+        )
+        self.assertEqual(
+            memory.app.async_execute.call_args_list[1][1]["name"],
+            "retrieve_task_memory",
+        )
 
     async def test_personal_branches_and_error_paths(self) -> None:
         """Personal memory should cover no-result and exception branches."""
@@ -353,7 +370,10 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
         )
         error_retrieve = await memory.retrieve_from_memory(["boom"])
 
-        self.assertIn("Successfully recorded 1 task", ok_result.content[0]["text"])
+        self.assertIn(
+            "Successfully recorded 1 task",
+            ok_result.content[0]["text"],
+        )
         self.assertEqual(
             no_result.content[0]["text"],
             "No task experiences found for the given keywords.",
@@ -433,7 +453,10 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
         error_record = await memory.record_to_memory("why", [payload])
         error_retrieve = await memory.retrieve_from_memory(["broken"])
 
-        self.assertIn("Successfully recorded 1 tool execution", ok_result.content[0]["text"])
+        self.assertIn(
+            "Successfully recorded 1 tool execution",
+            ok_result.content[0]["text"],
+        )
         self.assertEqual(
             no_result.content[0]["text"],
             "No tool guidelines found for: missing",
@@ -510,7 +533,7 @@ class ReMeMemoryTest(IsolatedAsyncioTestCase):
                 )
 
     async def test_missing_reme_dependency_raises_import_error(self) -> None:
-        """Constructor should surface a clear install hint when import fails."""
+        """Constructor should surface a clear install hint."""
         sys.modules.pop("reme_ai", None)
         original_import = __import__
 

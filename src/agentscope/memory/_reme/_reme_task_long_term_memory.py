@@ -129,7 +129,9 @@ class ReMeTaskLongTermMemory(ReMeLongTermMemoryBase):
         if not msg_list:
             return
         if not all(isinstance(_, Msg) for _ in msg_list):
-            raise TypeError("The input messages must be a list of Msg objects.")
+            raise TypeError(
+                "The input messages must be a list of Msg objects.",
+            )
         if not self._app_started:
             raise RuntimeError(
                 "ReMeApp context not started. Please use 'async with' "

@@ -139,7 +139,9 @@ class ReMePersonalLongTermMemory(ReMeLongTermMemoryBase):
         if not msg_list:
             return
         if not all(isinstance(_, Msg) for _ in msg_list):
-            raise TypeError("The input messages must be a list of Msg objects.")
+            raise TypeError(
+                "The input messages must be a list of Msg objects.",
+            )
         if not self._app_started:
             raise RuntimeError(
                 "ReMeApp context not started. Please use 'async with' "
@@ -158,7 +160,10 @@ class ReMePersonalLongTermMemory(ReMeLongTermMemoryBase):
                 **kwargs,
             )
         except Exception as exc:  # pragma: no cover - exercised in tests
-            logger.exception("Error recording messages to memory: %s", str(exc))
+            logger.exception(
+                "Error recording messages to memory: %s",
+                str(exc),
+            )
             warnings.warn(
                 f"Error recording messages to memory: {str(exc)}",
                 stacklevel=2,
