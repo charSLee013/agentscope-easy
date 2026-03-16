@@ -172,6 +172,7 @@ async def write_text_file(
         `ToolResponse`:
             The tool response containing the result of the writing operation.
     """
+    file_path = os.path.expanduser(file_path)
     proceed, meta = _dangerous_text_io_guard("write_text_file", file_path)
     if not proceed:
         return ToolResponse(

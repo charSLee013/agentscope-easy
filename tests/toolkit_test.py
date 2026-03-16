@@ -11,6 +11,8 @@ from functools import partial
 from typing import Union, Optional, Any, AsyncGenerator, Generator, Tuple
 from unittest import IsolatedAsyncioTestCase
 
+import mcp.shared.exceptions
+from mcp.types import ErrorData
 from pydantic import BaseModel, Field
 
 from agentscope.message import ToolUseBlock, TextBlock
@@ -856,6 +858,83 @@ class ToolkitTest(IsolatedAsyncioTestCase):
                     TextBlock(type="text", text="Processed"),
                 ],
             )
+
+    async def test_toolkit_middlewares_wrap_in_registration_order(
+        self,
+    ) -> None:
+        """Tool middlewares should behave like an onion."""
+        tool_use_block = ToolUseBlock(
+            type="tool_use",
+            id="middleware-1",
+            name="sync_func",
+            input={"arg1": 10, "arg2": ["test"]},
+        )
+
+        async def middleware_1(
+            kwargs: dict[str, Any],
+            next_handler: Any,
+        ) -> AsyncGenerator[ToolResponse, None]:
+            kwargs["tool_call"]["input"]["arg2"].append("mw1")
+            async for chunk in await next_handler(**kwargs):
+                chunk.content.append(TextBlock(type="text", text="mw1"))
+                yield chunk
+
+        async def middleware_2(
+            kwargs: dict[str, Any],
+            next_handler: Any,
+        ) -> AsyncGenerator[ToolResponse, None]:
+            kwargs["tool_call"]["input"]["arg2"].append("mw2")
+            async for chunk in await next_handler(**kwargs):
+                chunk.content.append(TextBlock(type="text", text="mw2"))
+                yield chunk
+
+        self.toolkit.register_tool_function(sync_func)
+        self.toolkit.register_middleware(middleware_1)
+        self.toolkit.register_middleware(middleware_2)
+
+        res = await self.toolkit.call_tool_function(tool_use_block)
+        chunks = [chunk async for chunk in res]
+
+        self.assertEqual(
+            chunks[-1].content,
+            [
+                TextBlock(
+                    type="text",
+                    text="arg1: 10, arg2: ['test', 'mw1', 'mw2']",
+                ),
+                TextBlock(type="text", text="mw2"),
+                TextBlock(type="text", text="mw1"),
+            ],
+        )
+
+    async def test_toolkit_handles_mcp_error_as_tool_response(self) -> None:
+        """MCP errors should be surfaced as normal tool responses."""
+
+        async def mcp_tool() -> ToolResponse:
+            raise mcp.shared.exceptions.McpError(
+                ErrorData(code=1, message="MCP boom"),
+            )
+
+        self.toolkit.register_tool_function(mcp_tool)
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="mcp-error",
+                name="mcp_tool",
+                input={},
+            ),
+        )
+        chunks = [chunk async for chunk in res]
+
+        self.assertEqual(
+            chunks[-1].content,
+            [
+                TextBlock(
+                    type="text",
+                    text="Error occurred when calling MCP tool: MCP boom",
+                ),
+            ],
+        )
 
     async def test_namesake_strategy_skip_override_and_rename(self) -> None:
         """Duplicate tool names should respect the selected strategy."""

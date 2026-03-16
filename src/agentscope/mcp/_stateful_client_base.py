@@ -69,9 +69,13 @@ class StatefulClientBase(MCPClientBase, ABC):
             self.stack = None
             raise
 
-    async def close(self) -> None:
-        """Clean up the MCP client resources. You must call this method when
-        your application is done."""
+    async def close(self, ignore_errors: bool = True) -> None:
+        """Clean up the MCP client resources.
+
+        Args:
+            ignore_errors (`bool`):
+                Whether to swallow cleanup errors.
+        """
         if not self.is_connected:
             raise RuntimeError(
                 "The MCP server is not connected. Call connect() before "
@@ -82,6 +86,8 @@ class StatefulClientBase(MCPClientBase, ABC):
             await self.stack.aclose()
             logger.info("MCP client closed.")
         except Exception as e:
+            if not ignore_errors:
+                raise
             logger.warning("Error during MCP client cleanup: %s", e)
         finally:
             self.stack = None
@@ -107,6 +113,7 @@ class StatefulClientBase(MCPClientBase, ABC):
         self,
         func_name: str,
         wrap_tool_result: bool = True,
+        execution_timeout: float | None = None,
     ) -> MCPToolFunction:
         """Get an async tool function from the MCP server by its name, so
         that you can call it directly, wrap it into your own function, or
@@ -149,6 +156,7 @@ class StatefulClientBase(MCPClientBase, ABC):
             tool=target_tool,
             wrap_tool_result=wrap_tool_result,
             session=self.session,
+            timeout=execution_timeout,
         )
 
     def _validate_connection(self) -> None:
