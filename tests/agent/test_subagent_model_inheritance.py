@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from agentscope.agent import SubAgentBase
+from agentscope.agent._subagent_base import SubAgentBase
 from agentscope.message import Msg, TextBlock, ToolUseBlock
 from agentscope.model import ChatModelBase, ChatResponse
 from ._shared import (

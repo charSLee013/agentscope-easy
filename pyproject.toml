@@ -34,10 +34,12 @@ dependencies = [
     "opentelemetry-semantic-conventions>=0.60b0",
     "python-socketio",
     "requests",
+    "scipy",
     "shortuuid",
     "tiktoken",
     "sounddevice",
     "typing_extensions",
+    "websockets>=14.0",
 ]
 
 [project.optional-dependencies]

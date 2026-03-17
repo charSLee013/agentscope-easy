@@ -133,7 +133,14 @@ def test_pyproject_optional_dependency_keys_are_full_and_dev() -> None:
 def test_pyproject_base_dependencies_include_direct_imports() -> None:
     base_deps, _, _ = _parse_pyproject(PYPROJECT)
     names = {_req_name(_) for _ in base_deps}
-    required = {"pydantic", "typing_extensions", "requests", "jsonschema"}
+    required = {
+        "jsonschema",
+        "pydantic",
+        "requests",
+        "scipy",
+        "typing_extensions",
+        "websockets",
+    }
     missing = sorted(required - names)
     assert not missing, f"Missing base dependencies: {missing}"
 

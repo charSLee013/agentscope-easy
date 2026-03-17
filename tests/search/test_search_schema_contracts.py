@@ -5,13 +5,11 @@ Contract: each tool MUST expose exactly one parameter `query` (required).
 """
 from __future__ import annotations
 
-from agentscope.tool import (  # type: ignore
-    Toolkit,
-    search_bing,
-    search_github,
-    search_sogou,
-    search_wiki,
-)
+from agentscope.tool import Toolkit
+from agentscope.tool._search.bing import search_bing
+from agentscope.tool._search.github import search_github
+from agentscope.tool._search.sogou import search_sogou
+from agentscope.tool._search.wiki import search_wiki
 
 
 def _assert_query_only_schema(schema: dict) -> None:

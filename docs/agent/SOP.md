@@ -22,6 +22,9 @@ graph TD
         RB[ReActAgentBase]
         RA[ReActAgent]
     end
+    subgraph Realtime Family
+        RT[RealtimeAgent]
+    end
     subgraph User Interaction
         UA[UserAgent]
         UI[StudioUserInput]
@@ -37,6 +40,10 @@ graph TD
     RA --> Model
     RA --> Memory
     RA --> PlanNotebook
+    RT --> Toolkit
+    RT --> RealtimeModel
+    RT --> MsgBlocks
+    RT --> EventQueue[(Realtime Queues)]
     AB --> MsgHub
     AB --> Queue[(Msg Queue)]
 ```
@@ -65,6 +72,13 @@ graph TD
 
 - `UserAgent` 实现最简单的 `reply`/`observe`，用于命令终端或 Studio。
 - `StudioUserInput` 以长轮询/重试方式从 Studio 拉取输入；`UserAgent.override_class_input_method` 可切换交互来源。
+
+#### RealtimeAgent
+
+- **生命周期**：`start` 建立实时模型 WebSocket 连接，并启动“外部输入转发”和“模型响应消费”两个异步循环；`stop` 负责断开模型连接。
+- **输入转发**：`handle_input` 将前端或其他 Agent 发来的 `ClientEvents` / `ServerEvents` 放入 `_incoming_queue`，`_forward_loop` 再把文本、图片、音频块转换为 `AudioBlock` / `TextBlock` / `ImageBlock` 发给实时模型。
+- **音频重采样**：当上游发送的 PCM 采样率与模型要求不一致时，`_forward_loop` 会调用 `_resample_pcm_delta` 做运行时重采样，避免不同 provider 的固定采样率导致会话报错。
+- **工具执行**：`_model_response_loop` 收到 `ModelResponseToolUseDoneEvent` 后，会立刻向外发送 tool-use 事件，再异步调用 Toolkit 执行工具，并把 `ToolResultBlock` 同时回送模型与前端。
 
 #### 子模块文档（SubAgent 已分拆）
 
@@ -107,6 +121,11 @@ SubAgent（子 Agent）相关内容已迁移至独立文档：`docs/agent/subage
 - **`ReActAgent`**：完整 ReAct 循环、结构化输出、并行工具、计划/RAG/长期记忆集成等；关键方法 `_reasoning`、`_acting`、`_summarizing`、`generate_response`。
 - 内部使用 `_json_schema`、`Toolkit.set_extended_model` 等配置结构化输出。
 
+#### `src/agentscope/agent/_realtime_agent.py`
+
+- **`RealtimeAgent`**：面向低时延语音/多模态会话的 Agent；核心方法 `start`、`stop`、`handle_input`、`_forward_loop`、`_model_response_loop`、`_acting`。
+- 通过 `_incoming_queue` 接收前端事件、通过 `_model_response_queue` 消费 provider 事件，并在工具调用完成后把 `ToolResultBlock` 回灌到实时模型。
+
 #### `src/agentscope/agent/_user_agent.py`
 
 - **`UserAgent`**：面向命令行/Studio 的用户代理，实现最小 `reply` 与 `observe`。
@@ -117,7 +136,8 @@ SubAgent（子 Agent）相关内容已迁移至独立文档：`docs/agent/subage
 
 #### `src/agentscope/agent/__init__.py`
 
-- 导出 `AgentBase`、`ReActAgent`、`UserAgent`、`StudioUserInput`。
+- 导出 `AgentBase`、`ReActAgent`、`RealtimeAgent`、`UserAgent`、`StudioUserInput`。
+- `SubAgent*` 仍保留在内部实现与独立 SOP 中，但不再是 `agentscope.agent` 顶层公共导出。
 
 ## 三、关键数据结构与对外接口（含类型/返回约束）
 
@@ -127,6 +147,9 @@ SubAgent（子 Agent）相关内容已迁移至独立文档：`docs/agent/subage
 - `ReActAgent`
   - 接口：`async __call__(msg, ...) -> Msg`（别名 `reply`）、`generate_response(...)`（完成函数）。
   - 行为：`_reasoning → _acting → _summarizing` 循环；并行工具（`parallel_tool_calls=True`）；结构化输出通过 `Toolkit.set_extended_model` 绑定。
+- `RealtimeAgent`
+  - 接口：`async start(outgoing_queue: Queue) -> None`、`async stop() -> None`、`async handle_input(event: ClientEvents.EventBase | ServerEvents.EventBase) -> None`。
+  - 行为：把实时输入事件转成消息块发给 `RealtimeModelBase`，把 provider 返回的 `ModelEvents` 变成 `ServerEvents` 推给前端/其他 Agent；工具调用经 `Toolkit.call_tool_function` 异步完成。
 - `UserAgent`
   - 接口：最小 `reply/observe`；用于 CLI/Studio。
 - `StudioUserInput`
@@ -143,6 +166,7 @@ SubAgent（子 Agent）相关内容已迁移至独立文档：`docs/agent/subage
 - 典型调用链
   - Memory 记录输入 → Formatter 组装对话 → Model 生成文本/工具调用/结构化 → Toolkit 执行工具并返回 `ToolResponse` → 汇总/收束输出。
   - 工具路径：`ReActAgent._acting` → `Toolkit.call_tool_function` → 工具 `ToolResponse.content`（业务数据）/`metadata`（保留域）。
+  - 实时路径：Frontend/其他 Agent → `RealtimeAgent.handle_input` → `_forward_loop` → `RealtimeModelBase.send` → provider WebSocket → `parse_api_message` → `ModelEvents` → `RealtimeAgent._model_response_loop` → `ServerEvents` / `Toolkit.call_tool_function`。
 - 责任边界
   - Agent：决策与编排；不直接做外部 I/O，统一经工具与服务。
   - Toolkit：工具注册/分组/JSON‑Schema 暴露与执行；`preset_kwargs` 不出现在 Schema。
@@ -153,5 +177,5 @@ SubAgent（子 Agent）相关内容已迁移至独立文档：`docs/agent/subage
   - SubAgent：见 `docs/agent/subagent/SOP.md`（独立骨架与测试）。
 
 ## 五、测试文件
-- 绑定文件：`tests/react_agent_test.py`、`tests/user_input_test.py`
-- 覆盖点：ReAct 主循环、并行工具与完成函数、中断流程、打印与队列、Studio 用户输入覆写。
+- 绑定文件：`tests/react_agent_test.py`、`tests/user_input_test.py`、`tests/realtime_event_test.py`、`tests/realtime_openai_test.py`、`tests/realtime_gemini_test.py`、`tests/realtime_dashscope_test.py`、`tests/agent/test_audio_playback_gate.py`、`tests/public_surface_test.py`
+- 覆盖点：ReAct 主循环、并行工具与完成函数、中断流程、打印与队列、Studio 用户输入覆写、Realtime 事件映射/工具调用/Provider 解析、音频播放默认关闭、`agentscope.agent` 公共导出硬切。

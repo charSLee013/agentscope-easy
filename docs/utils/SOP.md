@@ -27,6 +27,7 @@ graph TD
 - `_json_loads_with_repair`：使用 `json_repair` 修复残缺 JSON，失败时抛 `ValueError`，错误信息同时包含原始串与修复串。
 - `_is_async_func` / `_execute_async_or_sync_func`：识别协程、异步生成器、`functools.partial` 等，统一执行并返回结果。
 - `_get_bytes_from_web_url`、`_save_base64_data`：分别负责下载文本/二进制内容、将 base64 数据写入临时文件，内置重试与异常传播。
+- `_resample_pcm_delta`：对 base64 编码的 PCM16 音频块做重采样，供 `RealtimeAgent` 在前端采样率与 provider 输入采样率不一致时转换音频流。
 - `_extract_json_schema_from_mcp_tool`、`_remove_title_field`、`_create_tool_from_base_model`：生成并清洗 JSON Schema，供 Toolkit 与模型结构化输出使用。
 - `_get_timestamp(add_random_suffix=False)`：生成毫秒级时间戳，可附随机后缀；`_map_text_to_uuid` 生成稳定 UUID。
 - `DictMixin`：允许字典对象支持属性访问（用于 `ChatResponse`、`MetricResult` 等数据类）。
@@ -45,6 +46,7 @@ graph TD
   - JSON：`_json_loads_with_repair`。
   - 异步：`_is_async_func`、`_execute_async_or_sync_func`.
   - 多模态 I/O：`_is_accessible_local_file`、`_get_bytes_from_web_url`、`_save_base64_data`。
+  - 音频：`_resample_pcm_delta`。
   - Schema：`_extract_json_schema_from_mcp_tool`、`_remove_title_field`、`_create_tool_from_base_model`。
   - 时间/ID：`_get_timestamp`、`_map_text_to_uuid`。
 - `src/agentscope/_utils/_mixin.py`
@@ -57,6 +59,7 @@ graph TD
 - `_execute_async_or_sync_func(func: Callable, *args, **kwargs) -> Any`：根据 `func` 类型决定 `await` 或直接调用。
 - `_get_bytes_from_web_url(url: str, max_retries: int = 3) -> str`：返回文本或 base64；失败抛异常。
 - `_save_base64_data(media_type: str, base64_data: str) -> str`：写临时文件并返回路径。
+- `_resample_pcm_delta(delta: str, origin_rate: int, target_rate: int) -> str`：将 base64 PCM16 音频从 `origin_rate` 重采样到 `target_rate` 并返回新的 base64 字符串；依赖 `scipy.signal.resample`。
 - `_extract_json_schema_from_mcp_tool(tool)` 返回符合 JSON Schema Draft-07 的 dict；`_remove_title_field` 原地修改 schema。
 - `_create_tool_from_base_model(structured_model: BaseModel, tool_name: str = "generate_structured_output") -> dict`：将 Pydantic 模型转为工具描述。
 - `_get_timestamp(add_random_suffix: bool = False) -> str`；`_map_text_to_uuid(text: str) -> str`。
@@ -66,9 +69,10 @@ graph TD
 - **模型结构化输出**：`_create_tool_from_base_model` → Formatter/Model → Toolkit。
 - **MCP 集成**：`_extract_json_schema_from_mcp_tool` → Toolkit 注册远端工具。
 - **多模态资源**：Formatter/Toolkit 使用 `_get_bytes_from_web_url`、`_save_base64_data` 处理图片/音频。
+- **Realtime 音频流**：`RealtimeAgent._forward_loop` 使用 `_resample_pcm_delta` 对齐前端采样率与 provider 固定采样率。
 - **异步 Hook 执行**：Agent/Plan 使用 `_execute_async_or_sync_func` 调度同步或异步 Hook。
 - 异常由调用方处理，工具函数不包含重试策略（除个别函数有限重试）。
 
 ## 五、测试文件
-- 绑定文件：间接：Model/Formatter/Toolkit/RAG 测试
-- 覆盖点：通用函数在调用路径中覆盖.
+- 绑定文件：间接：Model/Formatter/Toolkit/RAG 测试，以及 `tests/realtime_dashscope_test.py`、`tests/realtime_gemini_test.py`、`tests/realtime_openai_test.py`
+- 覆盖点：通用函数在调用路径中覆盖，包括 Realtime 音频流的运行时重采样辅助路径。

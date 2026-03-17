@@ -100,6 +100,33 @@ print(sorted(agentscope.tts.__all__))
     assert "OpenAITTSModel" in res.stdout
 
 
+def test_import_agentscope_realtime_is_runtime_dep_safe() -> None:
+    code = r"""
+import builtins
+
+real_import = builtins.__import__
+blocked = {"scipy", "websockets"}
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if (
+        name in blocked
+        or any(name.startswith(prefix + ".") for prefix in blocked)
+    ):
+        raise ModuleNotFoundError(f"blocked: {name}")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+import agentscope
+import agentscope.realtime
+
+print(sorted(agentscope.realtime.__all__))
+"""
+    res = _run_python(code)
+    assert res.returncode == 0, f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+    assert "OpenAIRealtimeModel" in res.stdout
+
+
 def test_import_agentscope_tune_is_trinity_safe() -> None:
     code = r"""
 import builtins
