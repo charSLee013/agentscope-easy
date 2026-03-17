@@ -60,10 +60,7 @@ def _apply_middlewares(
         ...,
         Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]],
     ],
-) -> Callable[
-    ...,
-    Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]],
-]:
+) -> Callable[..., Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]]]:
     """Wrap `call_tool_function` with onion-style middlewares."""
 
     @wraps(func)

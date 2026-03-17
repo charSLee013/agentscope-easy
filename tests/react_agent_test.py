@@ -193,7 +193,8 @@ class DummyKnowledgeBase(KnowledgeBase):
         self.queries.append(query)
         return [
             Document(
-                metadata=DocMetadata(  # pylint: disable=no-value-for-parameter,missing-kwoa
+                # pylint: disable-next=no-value-for-parameter,missing-kwoa
+                metadata=DocMetadata(
                     content=TextBlock(type="text", text="knowledge"),
                     doc_id="doc-1",
                     chunk_id=0,

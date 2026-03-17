@@ -28,7 +28,9 @@ class MCPClientContractTest(IsolatedAsyncioTestCase):
             inputSchema={"type": "object", "properties": {}},
         )
 
-    async def test_stateful_get_callable_function_carries_timeout(self) -> None:
+    async def test_stateful_get_callable_function_carries_timeout(
+        self,
+    ) -> None:
         """Stateful clients should forward execution timeout."""
         client = DummyStatefulClient()
         client.is_connected = True

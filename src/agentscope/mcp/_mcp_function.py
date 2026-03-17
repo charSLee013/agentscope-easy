@@ -44,9 +44,7 @@ class MCPToolFunction:
         self.json_schema = _extract_json_schema_from_mcp_tool(tool)
         self.wrap_tool_result = wrap_tool_result
         self.timeout = (
-            timedelta(seconds=timeout)
-            if timeout is not None
-            else None
+            timedelta(seconds=timeout) if timeout is not None else None
         )
 
         # Cannot be None at the same time
