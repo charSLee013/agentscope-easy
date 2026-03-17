@@ -7,11 +7,9 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from agentscope.agent import (
-    ReActAgent,
-    SubAgentBase,
-    SubAgentSpec,
-)
+from agentscope.agent import ReActAgent
+from agentscope.agent._subagent_base import SubAgentBase
+from agentscope.agent._subagent_tool import SubAgentSpec
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg, TextBlock, ToolUseBlock

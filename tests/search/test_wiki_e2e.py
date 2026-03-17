@@ -2,7 +2,8 @@
 import re
 import pytest
 
-from agentscope.tool import search_wiki, ToolResponse  # type: ignore
+from agentscope.tool import ToolResponse  # type: ignore
+from agentscope.tool._search.wiki import search_wiki
 
 
 def test_wiki_search_e2e_returns_results() -> None:

@@ -36,6 +36,7 @@ _LAZY_SUBMODULES: set[str] = {
     "tracing",
     "rag",
     "tts",
+    "realtime",
 }
 
 
@@ -168,6 +169,7 @@ __all__ = [
     "tracing",
     "rag",
     "tts",
+    "realtime",
     # functions
     "init",
     "setup_logger",

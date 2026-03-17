@@ -11,7 +11,8 @@ def test_bing_mobile_search_e2e_returns_results() -> None:
     except Exception as e:  # pragma: no cover - env dependent
         pytest.skip(f"Playwright not available: {e}")
 
-    from agentscope.tool import search_bing, ToolResponse  # type: ignore
+    from agentscope.tool import ToolResponse  # type: ignore
+    from agentscope.tool._search.bing import search_bing
 
     async def _run() -> None:
         # Use an organic query that should yield results

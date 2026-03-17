@@ -45,6 +45,7 @@ graph TD
 
 ### 5. 其他组件的交互
 - **Agent / ReActAgent**：行动阶段调用 `call_tool_function` 执行工具；`ToolResponse.metadata.response_msg` 可作为完成函数的最终答案。
+- **RealtimeAgent**：启动实时会话时通过 `Toolkit.get_json_schemas` 把工具描述传给 provider；收到 `ModelResponseToolUseDoneEvent` 后再调用 `Toolkit.call_tool_function` 执行实际工具，并把结果作为 `ToolResultBlock` 回送模型。
 - **Toolkit JSON Schema → Model**：`get_json_schemas` 提供给模型（通过 Formatter）作为工具调用描述。
 - **PlanNotebook/Memory 等工具供给者**：通过 Toolkit 注册自己的函数或工具组，实现动态启停。
 - **Tracing & Logging**：`trace_toolkit` 记录输入、输出、异常；内部对不可恢复的错误直接抛出，由 Agent 决定是否转为文本。
@@ -68,7 +69,8 @@ graph TD
   - `_text_file`：提供 `view_text_file` / `write_text_file` / `insert_text_file` 三个示例工具。【封存警示】这些函数直接调用宿主操作系统 `open()` / `os.path.exists()`，不会经过 `FileDomainService` 或逻辑命名空间校验，默认 Toolkit 不得随意注册。仅在确认需要访问 sandbox 之外的路径、并已完成风险评估与审计记录时，方可由开发者显式启用。
   - 示例工具集合，可参考其注册方式。
 - `src/agentscope/tool/__init__.py`
-  - 导出 `Toolkit`、常用工具函数、`execute_python_code` 等。
+  - 导出 `Toolkit`、`ToolResponse`、代码执行/文本文件/多模态工具。
+  - `search_bing` / `search_sogou` / `search_github` / `search_wiki` 仍保留在子模块实现中，但不再作为 `agentscope.tool` 顶层公共导出。
 
 ## 三、关键数据结构与对外接口（含类型/返回约束）
 - `Toolkit.register_tool_function(`
@@ -100,6 +102,7 @@ graph TD
 
 ## 四、与其他模块交互（调用链与责任边界）
 - **Agent ↔ Toolkit**：Agent 在行动阶段根据模型返回的 `ToolUseBlock` 调用 `Toolkit.call_tool_function`；返回的 `ToolResponse` 被 Agent 转成输出消息或结构化结果。
+- **RealtimeAgent ↔ Toolkit**：实时 provider 在 session 初始化阶段消费 `Toolkit.get_json_schemas` 的结果；当 provider 发出完整工具调用时，`RealtimeAgent._acting` 调用 Toolkit 执行，并将结果同步发送给前端与 provider。
 - **Formatter/Model**：`Toolkit.get_json_schemas` 的结果被 Formatter 注入到模型请求中；模型调用工具后返回 `tool_use` 分片。
 - **Tracing**：`trace_toolkit` 装饰 `call_tool_function`，记录输入、输出和异常，帮助调试外部工具。
 - **MCP 模块**：`Toolkit.register_mcp_client` 依赖 MCP 客户端实现，以 RPC 方式访问远程工具。
@@ -109,8 +112,8 @@ graph TD
   - 若工具抛异常，Toolkit 默认向上抛或生成错误块，由 Agent 决定是否展示。
 
 ## 五、测试文件
-- 绑定文件：`tests/toolkit_test.py`、`tests/tool_test.py`、`tests/tool_openai_test.py`、`tests/tool_dashscope_test.py`
-- 覆盖点：注册（函数/partial/MCP）、JSON Schema 生成与清洗、结构化完成函数扩展模型、postprocess 行为、同步/异步/流式统一封装、分组启停、异常路径与错误提示。
+- 绑定文件：`tests/toolkit_test.py`、`tests/tool_test.py`、`tests/tool_openai_test.py`、`tests/tool_dashscope_test.py`、`tests/search/test_search_schema_contracts.py`、`tests/public_surface_test.py`
+- 覆盖点：注册（函数/partial/MCP）、JSON Schema 生成与清洗、结构化完成函数扩展模型、postprocess 行为、同步/异步/流式统一封装、分组启停、异常路径与错误提示、Realtime 工具 schema 兼容、`agentscope.tool` 顶层公共导出边界。
 
 ## 危险工具告示（Raw OS Text I/O）
 

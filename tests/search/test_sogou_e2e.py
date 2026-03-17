@@ -14,7 +14,8 @@ try:  # pragma: no cover - env dependent
 except Exception:  # noqa: BLE001
     playwright = None
 
-from agentscope.tool import search_sogou, ToolResponse  # type: ignore
+from agentscope.tool import ToolResponse  # type: ignore
+from agentscope.tool._search.sogou import search_sogou
 
 
 def test_sogou_search_e2e_returns_results() -> None:

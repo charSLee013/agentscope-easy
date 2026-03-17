@@ -8,7 +8,7 @@ import pytest
 
 from pydantic import BaseModel
 
-from agentscope.agent import SubAgentUnavailable, SubAgentBase
+from agentscope.agent._subagent_base import SubAgentUnavailable, SubAgentBase
 from agentscope.message import Msg
 from ._shared import build_host_agent, build_spec
 

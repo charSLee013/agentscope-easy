@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Callable, Type, Dict
 
+import numpy as np
 import requests
 from json_repair import repair_json
 from pydantic import BaseModel
@@ -308,3 +309,26 @@ def _map_text_to_uuid(text: str) -> str:
             A deterministic UUID string derived from the input text.
     """
     return str(uuid.uuid3(uuid.NAMESPACE_DNS, text))
+
+
+def _resample_pcm_delta(
+    pcm_base64: str,
+    sample_rate: int,
+    target_rate: int,
+) -> str:
+    """Resample PCM16 base64 audio into the target sample rate."""
+    pcm_data = base64.b64decode(pcm_base64)
+    audio_array = np.frombuffer(pcm_data, dtype=np.int16)
+
+    if sample_rate == target_rate:
+        return pcm_base64
+
+    num_samples = int(len(audio_array) * target_rate / sample_rate)
+
+    from scipy import signal
+
+    resampled_audio = signal.resample(audio_array, num_samples)
+    resampled_audio = np.clip(resampled_audio, -32768, 32767).astype(np.int16)
+
+    resampled_bytes = resampled_audio.tobytes()
+    return base64.b64encode(resampled_bytes).decode("utf-8")

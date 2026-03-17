@@ -13,7 +13,8 @@ try:  # pragma: no cover - env dependent
 except Exception:  # noqa: BLE001
     playwright = None
 
-from agentscope.tool import search_github, ToolResponse  # type: ignore
+from agentscope.tool import ToolResponse  # type: ignore
+from agentscope.tool._search.github import search_github
 
 
 def test_github_search_e2e_returns_results() -> None:
