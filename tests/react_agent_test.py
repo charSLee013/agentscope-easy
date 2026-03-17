@@ -19,6 +19,7 @@ from agentscope.message import (
     ToolUseBlock,
 )
 from agentscope.model import ChatModelBase, ChatResponse
+from agentscope.rag import Document, DocMetadata, KnowledgeBase
 from agentscope.tool import Toolkit
 from agentscope.tts import TTSModelBase, TTSResponse
 
@@ -173,6 +174,42 @@ class RecordingLongTermMemory(LongTermMemoryBase):
         **kwargs: Any,
     ) -> str:
         return ""
+
+
+class DummyKnowledgeBase(KnowledgeBase):
+    """Minimal knowledge base for query-rewrite tests."""
+
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def retrieve(
+        self,
+        query: str,
+        limit: int = 5,
+        score_threshold: float | None = None,
+        **kwargs: Any,
+    ) -> list[Document]:
+        del limit, score_threshold, kwargs
+        self.queries.append(query)
+        return [
+            Document(
+                # pylint: disable-next=no-value-for-parameter,missing-kwoa
+                metadata=DocMetadata(
+                    content=TextBlock(type="text", text="knowledge"),
+                    doc_id="doc-1",
+                    chunk_id=0,
+                    total_chunks=1,
+                ),
+            ),
+        ]
+
+    async def add_documents(
+        self,
+        documents: list[Document],
+        **kwargs: Any,
+    ) -> None:
+        del documents, kwargs
+        raise NotImplementedError
 
 
 async def pre_reasoning_hook(self: ReActAgent, _kwargs: Any) -> None:
@@ -488,6 +525,47 @@ class ReActAgentTest(IsolatedAsyncioTestCase):
         self.assertNotIn(
             "result",
             finish_schema["function"]["parameters"]["properties"],
+        )
+
+    async def test_query_rewrite_restores_stream_flag_on_error(self) -> None:
+        """Failed query rewriting should still restore model.stream."""
+
+        class RewriteFailModel(ChatModelBase):
+            def __init__(self) -> None:
+                super().__init__("rewrite_fail_model", stream=True)
+
+            async def __call__(
+                self,
+                _messages: list[dict],
+                **kwargs: Any,
+            ) -> ChatResponse:
+                if kwargs.get("structured_model") is not None:
+                    raise RuntimeError("rewrite failed")
+                return ChatResponse(
+                    content=[TextBlock(type="text", text="ok")],
+                )
+
+        knowledge = DummyKnowledgeBase()
+        model = RewriteFailModel()
+        agent = ReActAgent(
+            name="Friday",
+            sys_prompt="You are a helpful assistant named Friday.",
+            model=model,
+            formatter=DashScopeChatFormatter(),
+            memory=InMemoryMemory(),
+            toolkit=Toolkit(),
+            knowledge=knowledge,
+            enable_rewrite_query=True,
+        )
+
+        await agent._retrieve_from_knowledge(
+            Msg("user", "What do you know about me?", "user"),
+        )
+
+        self.assertTrue(model.stream)
+        self.assertEqual(
+            knowledge.queries,
+            ["What do you know about me?"],
         )
 
     async def test_tts_model_adds_speech_to_text_reply(self) -> None:

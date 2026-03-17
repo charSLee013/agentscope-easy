@@ -93,6 +93,7 @@ class HttpStatelessClient(MCPClientBase):
         self,
         func_name: str,
         wrap_tool_result: bool = True,
+        execution_timeout: float | None = None,
     ) -> Callable[..., Awaitable[mcp.types.CallToolResult | ToolResponse]]:
         """Get a tool function by its name.
 
@@ -130,6 +131,7 @@ class HttpStatelessClient(MCPClientBase):
             tool=target_tool,
             wrap_tool_result=wrap_tool_result,
             client_gen=self.get_client,
+            timeout=execution_timeout,
         )
 
     async def list_tools(self) -> List[mcp.types.Tool]:

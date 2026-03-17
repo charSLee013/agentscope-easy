@@ -46,6 +46,7 @@ async def view_text_file(
         `ToolResponse`:
             The tool response containing the file content or an error message.
     """
+    file_path = os.path.expanduser(file_path)
     proceed, meta = _dangerous_text_io_guard("view_text_file", file_path)
     if not proceed:
         return ToolResponse(

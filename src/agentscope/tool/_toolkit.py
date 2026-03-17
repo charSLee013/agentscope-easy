@@ -6,7 +6,7 @@ import inspect
 import os
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import partial
+from functools import partial, wraps
 import shortuuid
 from typing import (
     AsyncGenerator,
@@ -17,8 +17,10 @@ from typing import (
     Generator,
     Callable,
     Awaitable,
+    Coroutine,
 )
 
+import mcp
 from pydantic import (
     BaseModel,
     Field,
@@ -51,6 +53,49 @@ from ..types import (
 )
 from ..tracing._trace import trace_toolkit
 from .._logging import logger
+
+
+def _apply_middlewares(
+    func: Callable[
+        ...,
+        Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]],
+    ],
+) -> Callable[..., Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]]]:
+    """Wrap `call_tool_function` with onion-style middlewares."""
+
+    @wraps(func)
+    async def wrapper(
+        self: "Toolkit",
+        tool_call: ToolUseBlock,
+    ) -> AsyncGenerator[ToolResponse, None]:
+        middlewares = getattr(self, "_middlewares", [])
+        if not middlewares:
+            return await func(self, tool_call=tool_call)
+
+        async def base_handler(
+            **kwargs: Any,
+        ) -> AsyncGenerator[ToolResponse, None]:
+            return await func(self, **kwargs)
+
+        current_handler = base_handler
+        for middleware in reversed(middlewares):
+
+            def make_handler(
+                mw: Callable[..., AsyncGenerator[ToolResponse, None]],
+                handler: Callable[..., AsyncGenerator[ToolResponse, None]],
+            ) -> Callable[..., AsyncGenerator[ToolResponse, None]]:
+                async def wrapped(
+                    **kwargs: Any,
+                ) -> AsyncGenerator[ToolResponse, None]:
+                    return mw(kwargs, handler)
+
+                return wrapped
+
+            current_handler = make_handler(middleware, current_handler)
+
+        return await current_handler(tool_call=tool_call)
+
+    return wrapper
 
 
 @dataclass
@@ -127,6 +172,7 @@ class Toolkit(StateModule):
         self.tools: dict[str, RegisteredToolFunction] = {}
         self.groups: dict[str, ToolGroup] = {}
         self.skills: dict[str, AgentSkill] = {}
+        self._middlewares: list = []
         self._agent_skill_instruction = (
             agent_skill_instruction or self._DEFAULT_AGENT_SKILL_INSTRUCTION
         )
@@ -615,6 +661,7 @@ class Toolkit(StateModule):
         )
 
     @trace_toolkit
+    @_apply_middlewares
     async def call_tool_function(
         self,
         tool_call: ToolUseBlock,
@@ -717,6 +764,15 @@ class Toolkit(StateModule):
                 # Sync function
                 res = tool_func.original_func(**kwargs)
 
+        except mcp.shared.exceptions.McpError as e:
+            res = ToolResponse(
+                content=[
+                    TextBlock(
+                        type="text",
+                        text=f"Error occurred when calling MCP tool: {e}",
+                    ),
+                ],
+            )
         except Exception as e:
             res = ToolResponse(
                 content=[
@@ -1019,6 +1075,17 @@ class Toolkit(StateModule):
         """Clear the toolkit, removing all tool functions and groups."""
         self.tools.clear()
         self.groups.clear()
+
+    def register_middleware(
+        self,
+        middleware: Callable[
+            ...,
+            Coroutine[Any, Any, AsyncGenerator[ToolResponse, None]]
+            | AsyncGenerator[ToolResponse, None],
+        ],
+    ) -> None:
+        """Register a middleware around `call_tool_function`."""
+        self._middlewares.append(middleware)
 
     def _validate_tool_function(self, func_name: str) -> None:
         """Check if the tool function already registered in the toolkit. If

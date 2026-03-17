@@ -2,6 +2,7 @@
 """The MCP tool function class in AgentScope."""
 from __future__ import annotations
 from contextlib import _AsyncGeneratorContextManager
+from datetime import timedelta
 from typing import Any, Callable, TYPE_CHECKING
 
 import mcp
@@ -34,6 +35,7 @@ class MCPToolFunction:
         client_gen: Callable[..., _AsyncGeneratorContextManager[Any]]
         | None = None,
         session: ClientSession | None = None,
+        timeout: float | None = None,
     ) -> None:
         """Initialize the MCP function."""
         self.mcp_name = mcp_name
@@ -41,6 +43,9 @@ class MCPToolFunction:
         self.description = tool.description
         self.json_schema = _extract_json_schema_from_mcp_tool(tool)
         self.wrap_tool_result = wrap_tool_result
+        self.timeout = (
+            timedelta(seconds=timeout) if timeout is not None else None
+        )
 
         # Cannot be None at the same time
         if (
@@ -69,12 +74,14 @@ class MCPToolFunction:
                     res = await session.call_tool(
                         self.name,
                         arguments=kwargs,
+                        read_timeout_seconds=self.timeout,
                     )
 
         else:
             res = await self.session.call_tool(
                 self.name,
                 arguments=kwargs,
+                read_timeout_seconds=self.timeout,
             )
 
         if self.wrap_tool_result:
