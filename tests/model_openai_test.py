@@ -56,6 +56,26 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
                 timeout=30,
             )
 
+    def test_init_with_azure_client(self) -> None:
+        """Test initialization with Azure OpenAI client."""
+        client_kwargs = {
+            "azure_endpoint": "https://example.openai.azure.com/",
+            "api_version": "2024-12-01-preview",
+        }
+        with patch("openai.AsyncAzureOpenAI") as mock_client:
+            OpenAIChatModel(
+                model_name="gpt-4o",
+                api_key="test_key",
+                client_type="azure",
+                client_kwargs=client_kwargs,
+            )
+            mock_client.assert_called_once_with(
+                api_key="test_key",
+                organization=None,
+                azure_endpoint="https://example.openai.azure.com/",
+                api_version="2024-12-01-preview",
+            )
+
     async def test_call_with_regular_model(self) -> None:
         """Test calling a regular model."""
         with patch("openai.AsyncClient") as mock_client_class:
@@ -87,6 +107,7 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
                 TextBlock(type="text", text="Hello! How can I help you?"),
             ]
             self.assertEqual(result.content, expected_content)
+            self.assertIs(result.usage.metadata, mock_response.usage)
 
     async def test_call_with_tools_integration(self) -> None:
         """Test full integration of tool calls."""
@@ -179,6 +200,39 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
             ]
             self.assertEqual(result.content, expected_content)
 
+    async def test_call_with_reasoning_field_fallback(self) -> None:
+        """Test newer reasoning field fallback for vLLM-compatible payloads."""
+        with patch("openai.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = OpenAIChatModel(
+                model_name="gpt-4",
+                api_key="test_key",
+                stream=False,
+            )
+            model.client = mock_client
+
+            mock_response = self._create_mock_response("Final answer")
+            mock_response.choices[0].message.reasoning = "Hidden reasoning"
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=mock_response,
+            )
+
+            result = await model(
+                [{"role": "user", "content": "Explain the answer"}],
+            )
+            self.assertEqual(
+                result.content,
+                [
+                    ThinkingBlock(
+                        type="thinking",
+                        thinking="Hidden reasoning",
+                    ),
+                    TextBlock(type="text", text="Final answer"),
+                ],
+            )
+
     async def test_call_with_structured_model_integration(self) -> None:
         """Test full integration of a structured model."""
         with patch("openai.AsyncClient") as mock_client_class:
@@ -260,6 +314,7 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
         message = Mock()
         message.content = content
         message.reasoning_content = None
+        message.reasoning = None
         message.tool_calls = []
         message.audio = None
         message.parsed = None
@@ -360,6 +415,69 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
             expected_content = [TextBlock(type="text", text="Hello there!")]
             self.assertEqual(final_response.content, expected_content)
 
+    async def test_streaming_response_with_tool_parsing_disabled(self) -> None:
+        """Test final tool parsing when stream_tool_parsing is disabled."""
+        with patch("openai.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = OpenAIChatModel(
+                model_name="gpt-4",
+                api_key="test_key",
+                stream=True,
+                stream_tool_parsing=False,
+            )
+            model.client = mock_client
+
+            stream_mock = self._create_stream_mock(
+                [
+                    {"content": "Hello"},
+                    {
+                        "tool_calls": [
+                            {
+                                "id": "call_123",
+                                "name": "greet",
+                                "arguments": '{"name": ',
+                            },
+                        ],
+                    },
+                    {
+                        "tool_calls": [
+                            {
+                                "id": "call_123",
+                                "arguments": '"user"}',
+                            },
+                        ],
+                    },
+                ],
+            )
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=stream_mock,
+            )
+
+            result = await model([{"role": "user", "content": "Say hello"}])
+            responses = []
+            async for response in result:
+                responses.append(response)
+
+            self.assertTrue(
+                any(
+                    block.get("type") == "tool_use" and block["input"] == {}
+                    for response in responses[:-1]
+                    for block in response.content
+                ),
+            )
+            self.assertEqual(
+                responses[-1].content[-1],
+                ToolUseBlock(
+                    type="tool_use",
+                    id="call_123",
+                    name="greet",
+                    input={"name": "user"},
+                    raw_input='{"name": "user"}',
+                ),
+            )
+
     def _create_stream_mock(self, chunks_data: list) -> Any:
         """Create a mock stream with proper async context management."""
 
@@ -400,6 +518,7 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
                     delta.reasoning_content = chunk_data.get(
                         "reasoning_content",
                     )
+                    delta.reasoning = chunk_data.get("reasoning")
 
                     audio_mock = Mock()
                     audio_mock.__contains__ = lambda self, key: False
@@ -411,9 +530,9 @@ class TestOpenAIChatModel(IsolatedAsyncioTestCase):
                         for tc_data in chunk_data["tool_calls"]:
                             tc_mock = Mock()
                             tc_mock.id = tc_data["id"]
-                            tc_mock.index = 0
+                            tc_mock.index = tc_data.get("index", 0)
                             tc_mock.function = Mock()
-                            tc_mock.function.name = tc_data["name"]
+                            tc_mock.function.name = tc_data.get("name")
                             tc_mock.function.arguments = tc_data["arguments"]
                             tool_call_mocks.append(tc_mock)
                         delta.tool_calls = tool_call_mocks

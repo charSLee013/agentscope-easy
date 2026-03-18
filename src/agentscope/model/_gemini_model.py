@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """The Google Gemini model in agentscope."""
+import base64
 import copy
+import json
 import warnings
 from datetime import datetime
 from typing import (
@@ -304,38 +306,55 @@ class GeminiChatModel(ChatModelBase):
 
         text = ""
         thinking = ""
+        tool_calls: list[ToolUseBlock] = []
         metadata: dict | None = None
         async for chunk in response:
-            content_block: list = []
-
-            # Thinking parts
             if (
                 chunk.candidates
                 and chunk.candidates[0].content
                 and chunk.candidates[0].content.parts
             ):
                 for part in chunk.candidates[0].content.parts:
-                    if part.thought and part.text:
-                        thinking += part.text
+                    if part.text:
+                        if part.thought:
+                            thinking += part.text
+                        else:
+                            text += part.text
 
-            # Text parts
-            if chunk.text:
-                text += chunk.text
-                if structured_model:
-                    metadata = _json_loads_with_repair(text)
+                    if getattr(part, "function_call", None):
+                        keyword_args = part.function_call.args or {}
+                        thought_signature = getattr(
+                            part,
+                            "thought_signature",
+                            None,
+                        )
+                        if thought_signature:
+                            signature_bytes = (
+                                thought_signature
+                                if isinstance(thought_signature, bytes)
+                                else str(thought_signature).encode("utf-8")
+                            )
+                            call_id = base64.b64encode(
+                                signature_bytes,
+                            ).decode("utf-8")
+                        else:
+                            call_id = part.function_call.id
 
-            # Function calls
-            tool_calls = []
-            if chunk.function_calls:
-                for function_call in chunk.function_calls:
-                    tool_calls.append(
-                        ToolUseBlock(
-                            type="tool_use",
-                            id=function_call.id,
-                            name=function_call.name,
-                            input=function_call.args or {},
-                        ),
-                    )
+                        tool_calls.append(
+                            ToolUseBlock(
+                                type="tool_use",
+                                id=call_id,
+                                name=part.function_call.name,
+                                input=keyword_args,
+                                raw_input=json.dumps(
+                                    keyword_args,
+                                    ensure_ascii=False,
+                                ),
+                            ),
+                        )
+
+            if text and structured_model:
+                metadata = _json_loads_with_repair(text)
 
             usage = None
             if chunk.usage_metadata:
@@ -346,6 +365,7 @@ class GeminiChatModel(ChatModelBase):
                     time=(datetime.now() - start_datetime).total_seconds(),
                 )
 
+            content_block: list = []
             if thinking:
                 content_block.append(
                     ThinkingBlock(
@@ -362,10 +382,8 @@ class GeminiChatModel(ChatModelBase):
                     ),
                 )
 
-            content_block.extend(tool_calls)
-
             parsed_chunk = ChatResponse(
-                content=content_block,
+                content=content_block + tool_calls,
                 usage=usage,
                 metadata=metadata,
             )
@@ -399,6 +417,7 @@ class GeminiChatModel(ChatModelBase):
         """
         content_blocks: List[TextBlock | ToolUseBlock | ThinkingBlock] = []
         metadata: dict | None = None
+        tool_calls: list[ToolUseBlock] = []
 
         if (
             response.candidates
@@ -406,34 +425,56 @@ class GeminiChatModel(ChatModelBase):
             and response.candidates[0].content.parts
         ):
             for part in response.candidates[0].content.parts:
-                if part.thought and part.text:
-                    content_blocks.append(
-                        ThinkingBlock(
-                            type="thinking",
-                            thinking=part.text,
+                if part.text:
+                    if part.thought:
+                        content_blocks.append(
+                            ThinkingBlock(
+                                type="thinking",
+                                thinking=part.text,
+                            ),
+                        )
+                    else:
+                        content_blocks.append(
+                            TextBlock(
+                                type="text",
+                                text=part.text,
+                            ),
+                        )
+
+                if getattr(part, "function_call", None):
+                    keyword_args = part.function_call.args or {}
+                    thought_signature = getattr(
+                        part,
+                        "thought_signature",
+                        None,
+                    )
+                    if thought_signature:
+                        signature_bytes = (
+                            thought_signature
+                            if isinstance(thought_signature, bytes)
+                            else str(thought_signature).encode("utf-8")
+                        )
+                        call_id = base64.b64encode(
+                            signature_bytes,
+                        ).decode("utf-8")
+                    else:
+                        call_id = part.function_call.id
+
+                    tool_calls.append(
+                        ToolUseBlock(
+                            type="tool_use",
+                            id=call_id,
+                            name=part.function_call.name,
+                            input=keyword_args,
+                            raw_input=json.dumps(
+                                keyword_args,
+                                ensure_ascii=False,
+                            ),
                         ),
                     )
 
-        if response.text:
-            content_blocks.append(
-                TextBlock(
-                    type="text",
-                    text=response.text,
-                ),
-            )
-            if structured_model:
-                metadata = _json_loads_with_repair(response.text)
-
-        if response.function_calls:
-            for tool_call in response.function_calls:
-                content_blocks.append(
-                    ToolUseBlock(
-                        type="tool_use",
-                        id=tool_call.id,
-                        name=tool_call.name,
-                        input=tool_call.args or {},
-                    ),
-                )
+        if response.text and structured_model:
+            metadata = _json_loads_with_repair(response.text)
 
         if response.usage_metadata:
             usage = ChatUsage(
@@ -447,7 +488,7 @@ class GeminiChatModel(ChatModelBase):
             usage = None
 
         return ChatResponse(
-            content=content_blocks,
+            content=content_blocks + tool_calls,
             usage=usage,
             metadata=metadata,
         )

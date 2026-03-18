@@ -273,6 +273,45 @@ class TestAnthropicChatModel(IsolatedAsyncioTestCase):
             ]
             self.assertEqual(result.content, expected_content)
 
+    async def test_call_with_tool_use_block_having_text_field(self) -> None:
+        """Test that tool_use blocks are not misread as text blocks."""
+        with patch("anthropic.AsyncAnthropic") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = AnthropicChatModel(
+                model_name="claude-3-sonnet-20240229",
+                api_key="test_key",
+                stream=False,
+            )
+            model.client = mock_client
+
+            tool_block = AnthropicContentBlockMock(
+                "tool_use",
+                id="tool_123",
+                name="get_weather",
+                input={"location": "Beijing"},
+                text="tool text should be ignored",
+            )
+            mock_response = AnthropicMessageMock(
+                content=[tool_block],
+                usage={"input_tokens": 10, "output_tokens": 8},
+            )
+            mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+            result = await model([{"role": "user", "content": "weather"}])
+            self.assertEqual(
+                result.content,
+                [
+                    ToolUseBlock(
+                        type="tool_use",
+                        id="tool_123",
+                        name="get_weather",
+                        input={"location": "Beijing"},
+                    ),
+                ],
+            )
+
     async def test_streaming_response_processing(self) -> None:
         """Test processing of streaming response."""
         with patch("anthropic.AsyncAnthropic") as mock_client_class:
@@ -325,6 +364,84 @@ class TestAnthropicChatModel(IsolatedAsyncioTestCase):
                 TextBlock(type="text", text="Hello there!"),
             ]
             self.assertEqual(final_response.content, expected_content)
+
+    async def test_streaming_response_with_tool_parsing_disabled(self) -> None:
+        """Test final tool parsing when stream_tool_parsing is disabled."""
+        with patch("anthropic.AsyncAnthropic") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = AnthropicChatModel(
+                model_name="claude-3-sonnet-20240229",
+                api_key="test_key",
+                stream=True,
+                stream_tool_parsing=False,
+            )
+            model.client = mock_client
+
+            events = [
+                AnthropicEventMock(
+                    "message_start",
+                    message=Mock(usage=Mock(input_tokens=10, output_tokens=0)),
+                ),
+                AnthropicEventMock(
+                    "content_block_start",
+                    index=0,
+                    content_block=AnthropicContentBlockMock(
+                        "tool_use",
+                        id="tool_123",
+                        name="get_weather",
+                    ),
+                ),
+                AnthropicEventMock(
+                    "content_block_delta",
+                    index=0,
+                    delta=Mock(
+                        type="input_json_delta",
+                        partial_json='{"city": ',
+                    ),
+                ),
+                AnthropicEventMock(
+                    "content_block_delta",
+                    index=0,
+                    delta=Mock(
+                        type="input_json_delta",
+                        partial_json='"Beijing"}',
+                    ),
+                ),
+                AnthropicEventMock(
+                    "message_delta",
+                    usage=Mock(output_tokens=5),
+                ),
+            ]
+
+            async def mock_stream() -> AsyncGenerator:
+                for event in events:
+                    yield event
+
+            mock_client.messages.create = AsyncMock(return_value=mock_stream())
+            result = await model([{"role": "user", "content": "weather"}])
+            responses = []
+            async for response in result:
+                responses.append(response)
+
+            self.assertTrue(
+                any(
+                    block.get("type") == "tool_use" and block["input"] == {}
+                    for response in responses[:-1]
+                    for block in response.content
+                ),
+            )
+            self.assertEqual(
+                responses[-1].content[-1],
+                ToolUseBlock(
+                    type="tool_use",
+                    id="tool_123",
+                    name="get_weather",
+                    input={"city": "Beijing"},
+                    raw_input='{"city": "Beijing"}',
+                ),
+            )
 
     async def test_generate_kwargs_integration(self) -> None:
         """Test integration of generate_kwargs."""

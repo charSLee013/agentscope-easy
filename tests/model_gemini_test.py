@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for Google Gemini API model class."""
+import base64
+import json
 from typing import AsyncGenerator
 from unittest.async_case import IsolatedAsyncioTestCase
 from unittest.mock import Mock, patch, AsyncMock
@@ -24,7 +26,28 @@ class GeminiResponseMock:
         self.usage_metadata = (
             self._create_usage_mock(usage_metadata) if usage_metadata else None
         )
-        self.candidates = candidates or []
+        if candidates:
+            self.candidates = candidates
+        else:
+            part = Mock()
+            part.text = text
+            part.thought = False
+            part.function_call = None
+            part.thought_signature = None
+
+            first_candidate = Mock()
+            first_candidate.content = Mock()
+            first_candidate.content.parts = [part]
+
+            for function_call in function_calls or []:
+                part = Mock()
+                part.text = None
+                part.thought = False
+                part.function_call = function_call
+                part.thought_signature = None
+                first_candidate.content.parts.append(part)
+
+            self.candidates = [first_candidate]
 
     def _create_usage_mock(self, usage_data: dict) -> Mock:
         usage_mock = Mock()
@@ -48,6 +71,8 @@ class GeminiPartMock:
     def __init__(self, text: str = "", thought: bool = False):
         self.text = text
         self.thought = thought
+        self.function_call = None
+        self.thought_signature = None
 
 
 class GeminiCandidateMock:
@@ -201,6 +226,7 @@ class TestGeminiChatModel(IsolatedAsyncioTestCase):
                     id="call_123",
                     name="get_weather",
                     input={"location": "Beijing"},
+                    raw_input=json.dumps({"location": "Beijing"}),
                 ),
             ]
             self.assertEqual(result.content, expected_content)
@@ -230,7 +256,11 @@ class TestGeminiChatModel(IsolatedAsyncioTestCase):
                 text="Let me analyze this step by step...",
                 thought=True,
             )
-            candidate = GeminiCandidateMock(parts=[thinking_part])
+            text_part = GeminiPartMock(
+                text="Here's my analysis",
+                thought=False,
+            )
+            candidate = GeminiCandidateMock(parts=[thinking_part, text_part])
             mock_response = self._create_mock_response_with_thinking(
                 "Here's my analysis",
                 candidates=[candidate],
@@ -253,6 +283,55 @@ class TestGeminiChatModel(IsolatedAsyncioTestCase):
                 TextBlock(type="text", text="Here's my analysis"),
             ]
             self.assertEqual(result.content, expected_content)
+
+    async def test_call_with_thought_signature_tool_id(self) -> None:
+        """Test Gemini-3-Pro style thought signature fallback for tool ids."""
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            model = GeminiChatModel(
+                model_name="gemini-3-pro",
+                api_key="test_key",
+                stream=False,
+            )
+            model.client = mock_client
+
+            function_call = GeminiFunctionCallMock(
+                call_id=None,
+                name="get_weather",
+                args={"location": "Beijing"},
+            )
+            tool_part = GeminiPartMock()
+            tool_part.function_call = function_call
+            tool_part.thought_signature = b"gemini-signature"
+            candidate = GeminiCandidateMock(parts=[tool_part])
+            mock_response = self._create_mock_response_with_thinking(
+                "",
+                candidates=[candidate],
+            )
+            mock_client.aio.models.generate_content = AsyncMock(
+                return_value=mock_response,
+            )
+
+            result = await model([{"role": "user", "content": "weather"}])
+            self.assertEqual(
+                result.content,
+                [
+                    ToolUseBlock(
+                        type="tool_use",
+                        id=base64.b64encode(b"gemini-signature").decode(
+                            "utf-8",
+                        ),
+                        name="get_weather",
+                        input={"location": "Beijing"},
+                        raw_input=json.dumps(
+                            {"location": "Beijing"},
+                            ensure_ascii=False,
+                        ),
+                    ),
+                ],
+            )
 
     async def test_call_with_structured_model_integration(self) -> None:
         """Test full integration of a structured model."""

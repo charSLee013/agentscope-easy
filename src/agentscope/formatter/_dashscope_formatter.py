@@ -369,17 +369,13 @@ class DashScopeChatFormatter(TruncatedFormatterBase):
 
             msg_dashscope = {
                 "role": msg.role,
-                "content": content_blocks or [{"text": None}],
+                "content": content_blocks,
             }
 
             if tool_calls:
                 msg_dashscope["tool_calls"] = tool_calls
 
-            if msg_dashscope["content"] != [
-                {"text": None},
-            ] or msg_dashscope.get(
-                "tool_calls",
-            ):
+            if msg_dashscope["content"] or msg_dashscope.get("tool_calls"):
                 formatted_msgs.append(msg_dashscope)
 
             # Move to next message

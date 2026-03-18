@@ -31,11 +31,11 @@ graph TD
 
 ### 3. 核心组件逻辑
 - `ChatModelBase.__call__` 统一入口：接收标准化的消息列表、工具 schema 与 `tool_choice`；当 `structured_model` 存在时进入结构化输出分支，其他参数交给具体实现。
-- 流式解析：各实现维护累积缓冲，将 reasoning/text/audio/tool_calls 切片组装成增量 `ChatResponse`，并在结束时补全 `usage`。
+- 流式解析：各实现维护累积缓冲，将 reasoning/text/audio/tool_calls 切片组装成增量 `ChatResponse`，并在结束时补全 `usage`；`OpenAI`/`Anthropic`/`DashScope` 支持通过 `stream_tool_parsing` 控制是否在流式过程中即时修复工具入参 JSON。
 - 非流式解析：一次性发送请求并解析响应，生成包含所有内容块、工具调用和 `ChatUsage` 的 `ChatResponse`。
 - 结构化输出：通过 `_create_tool_from_base_model` 把 Pydantic 模型转换为强制调用的“完成函数”，把解析后的 `parsed`/`parsed_output` 写入 `ChatResponse.metadata`。
 - 工具协议：对 Formatter 生成的 JSON schema 原样透传；`tool_choice` 支持 `"auto"|"none"|"any"|"required"|函数名`，并由 `_validate_tool_choice` 校验。
-- 用量统计：以 `ChatUsage` 表示输入/输出 token 和耗时；耗时通常在调用前后用 `datetime.now()` 计算。
+- 用量统计：以 `ChatUsage` 表示输入/输出 token 和耗时；必要时通过 `ChatUsage.metadata` 保留 provider-native usage 细节；耗时通常在调用前后用 `datetime.now()` 计算。
 
 ### 4. 关键设计模式
 - **适配器模式**：每个具体模型类适配各自 SDK，统一输出 `ChatResponse`。
@@ -59,14 +59,14 @@ graph TD
   - `ChatUsage`：`input_tokens`、`output_tokens`、`time`。
   - 均继承 `DictMixin`，支持 dict 风格访问。
 - `src/agentscope/model/_openai_model.py`
-  - `OpenAIChatModel`：封装 `openai.AsyncClient`；处理流式/非流式/结构化输出；解析 reasoning/audio/tool 调用。
+  - `OpenAIChatModel`：封装 `openai.AsyncClient` / `openai.AsyncAzureOpenAI`；处理流式/非流式/结构化输出；解析 reasoning/audio/tool 调用，支持 `client_type` 与 `stream_tool_parsing`。
   - 重要方法：`_parse_openai_completion_response`、`_parse_openai_stream_response`。
 - `src/agentscope/model/_anthropic_model.py`
-  - `AnthropicChatModel`：适配 Anthropic Messages API；结构化输出通过工具注入；处理思维内容与工具分片。
+  - `AnthropicChatModel`：适配 Anthropic Messages API；结构化输出通过工具注入；处理思维内容与工具分片，支持 `stream_tool_parsing`。
 - `src/agentscope/model/_dashscope_model.py`
-  - `DashScopeChatModel`：适配阿里云 DashScope；支持思维链与多模态字段映射。
+  - `DashScopeChatModel`：适配阿里云 DashScope；支持思维链、多模态路由、环境头部注入与 `stream_tool_parsing`。
 - `src/agentscope/model/_gemini_model.py`
-  - `GeminiChatModel`：封装 Google Gemini，处理文本和多模态输入/输出。
+  - `GeminiChatModel`：封装 Google Gemini，处理文本和多模态输入/输出，并兼容 Gemini-3-Pro 的 `thought_signature` 工具调用形态。
 - `src/agentscope/model/_ollama_model.py`
   - `OllamaChatModel`：本地模型接口；流式文本解析、结构化 JSON 解析通过 `_json_loads_with_repair`。
 - `src/agentscope/model/_trinity_model.py`
@@ -89,9 +89,11 @@ graph TD
   - `usage: ChatUsage | None`、`metadata: dict[str, JSONSerializableObject] | None`、`id: str`、`created_at: str`。
   - `DictMixin` 支持属性/键访问。
 - `ChatUsage`
-  - `input_tokens: int`、`output_tokens: int`、`time: float`、`type: Literal["chat"]`。
+  - `input_tokens: int`、`output_tokens: int`、`time: float`、`type: Literal["chat"]`、`metadata: dict[str, Any] | None`。
 - 各模型构造函数示例：
-  - `OpenAIChatModel(model_name: str, api_key: str | None = None, stream: bool = True, reasoning_effort: Literal["low","medium","high"] | None = None, organization: str | None = None, client_kwargs: dict | None = None, generate_kwargs: dict[str, JSONSerializableObject] | None = None)`.
+  - `OpenAIChatModel(model_name: str, api_key: str | None = None, stream: bool = True, reasoning_effort: Literal["low","medium","high"] | None = None, organization: str | None = None, client_type: Literal["openai","azure"] = "openai", stream_tool_parsing: bool = True, client_kwargs: dict | None = None, generate_kwargs: dict[str, JSONSerializableObject] | None = None)`.
+  - `DashScopeChatModel(model_name: str, api_key: str, stream: bool = True, enable_thinking: bool | None = None, multimodality: bool | None = None, generate_kwargs: dict[str, JSONSerializableObject] | None = None, base_http_api_url: str | None = None, stream_tool_parsing: bool = True)`.
+  - `AnthropicChatModel(model_name: str, api_key: str | None = None, max_tokens: int = 2048, stream: bool = True, thinking: dict | None = None, stream_tool_parsing: bool = True, client_kwargs: dict | None = None, generate_kwargs: dict[str, JSONSerializableObject] | None = None)`.
   - `TrinityChatModel(openai_async_client: AsyncOpenAI, generate_kwargs: dict[str, JSONSerializableObject] | None = None, enable_thinking: bool | None = None)`.
   - 其他模型有类似参数（DashScope 需要 `api_key` 与模型名；Gemini/Ollama/Anthropic 各自接受客户端配置）。
 - 异常约束

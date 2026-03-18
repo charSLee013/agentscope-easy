@@ -96,6 +96,42 @@ class TestDashScopeChatModel(IsolatedAsyncioTestCase):
                 TextBlock(type="text", text="Hello! How can I help you?"),
             ]
             self.assertEqual(result.content, expected_content)
+            self.assertIs(result.usage.metadata, mock_response.usage)
+
+    def test_init_load_headers_from_env(self) -> None:
+        """Test loading DashScope headers from environment."""
+        with patch.dict(
+            "os.environ",
+            {"DASHSCOPE_API_HEADERS": '{"x-env-header": "1"}'},
+            clear=False,
+        ):
+            model = DashScopeChatModel(
+                model_name="qwen-max",
+                api_key="test_key",
+                generate_kwargs={"headers": {"x-local-header": "2"}},
+            )
+
+        self.assertEqual(
+            model.generate_kwargs["headers"],
+            {"x-env-header": "1", "x-local-header": "2"},
+        )
+
+    async def test_call_with_multimodality_override(self) -> None:
+        """Test explicit multimodality routing override."""
+        model = DashScopeChatModel(
+            model_name="qwen-max",
+            api_key="test_key",
+            stream=False,
+            multimodality=True,
+        )
+        mock_response = self._create_mock_response("Hi")
+
+        with patch("dashscope.MultiModalConversation.call") as mock_call:
+            mock_call.return_value = mock_response
+            result = await model([{"role": "user", "content": "Hello"}])
+
+        self.assertIsInstance(result, ChatResponse)
+        mock_call.assert_called_once()
 
     async def test_call_with_tools_integration(self) -> None:
         """Test full integration of tool calls."""
@@ -284,15 +320,28 @@ class TestDashScopeChatModel(IsolatedAsyncioTestCase):
                 tool_calls=[],
             ),
             self._create_mock_chunk(
-                content=" there!",
-                reasoning_content=" the user",
+                content=" there",
+                reasoning_content=" the",
                 tool_calls=[
                     {
                         "index": 0,
                         "id": "call_123",
                         "function": {
                             "name": "greet",
-                            "arguments": '{"name": "user"}',
+                            "arguments": '{"name": ',
+                        },
+                    },
+                ],
+            ),
+            self._create_mock_chunk(
+                content="!",
+                reasoning_content=" user",
+                tool_calls=[
+                    {
+                        "index": 0,
+                        "id": "call_123",
+                        "function": {
+                            "arguments": '"user"}',
                         },
                     },
                 ],
@@ -308,7 +357,7 @@ class TestDashScopeChatModel(IsolatedAsyncioTestCase):
             responses = []
             async for response in result:
                 responses.append(response)
-            self.assertEqual(len(responses), 2)
+            self.assertEqual(len(responses), 3)
             final_response = responses[-1]
 
             expected_content = [
@@ -322,6 +371,7 @@ class TestDashScopeChatModel(IsolatedAsyncioTestCase):
                     name="greet",
                     input={"name": "user"},
                     type="tool_use",
+                    raw_input='{"name": "user"}',
                 ),
             ]
             self.assertEqual(final_response.content, expected_content)
