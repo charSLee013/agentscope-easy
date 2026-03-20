@@ -56,7 +56,8 @@ from . import pipeline
 from . import tracing
 from . import rag
 from . import a2a
-from . import realtime
+from . import realtime  # noqa: F401
+from . import filesystem
 
 from ._logging import (
     logger,
@@ -175,6 +176,7 @@ __all__ = [
     "tracing",
     "rag",
     "a2a",
+    "filesystem",
     # functions
     "init",
     "setup_logger",

@@ -149,3 +149,11 @@ package-lock.json
 .wireit/
 .angular/
 uv.lock
+
+# Local agent workflow / temp outputs
+.codex/
+artifacts/
+output/
+.spec-workflow/
+.specify/
+enable_spec_by_codex.sh
