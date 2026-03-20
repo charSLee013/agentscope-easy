@@ -53,6 +53,31 @@ class MyModel(ChatModelBase):
             )
 
 
+class SequenceModel(ChatModelBase):
+    """Deterministic model that returns a queued sequence of outputs."""
+
+    def __init__(self, responses: list[list[dict]]) -> None:
+        """Initialize the sequence model."""
+        super().__init__("sequence_model", stream=False)
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    async def __call__(
+        self,
+        _messages: list[dict],
+        **kwargs: Any,
+    ) -> ChatResponse:
+        """Return the next queued response."""
+        self.calls.append(dict(kwargs))
+        return ChatResponse(content=self._responses.pop(0))
+
+
+class StructuredReplyModel(BaseModel):
+    """Structured payload returned through the finish tool."""
+
+    result: str = Field(description="Structured result.")
+
+
 async def pre_reasoning_hook(self: ReActAgent, _kwargs: Any) -> None:
     """Mock pre-reasoning hook."""
     if hasattr(self, "cnt_pre_reasoning"):
@@ -189,3 +214,126 @@ class ReActAgentTest(IsolatedAsyncioTestCase):
             agent.finish_function_name in agent.toolkit.tools,
             "generate_response should be removed when no structured_model",
         )
+
+    async def test_structured_finish_tool_carries_text_and_metadata(
+        self,
+    ) -> None:
+        """Finish-tool output should become final text plus metadata."""
+        model = SequenceModel(
+            [
+                [
+                    ToolUseBlock(
+                        type="tool_use",
+                        name="generate_response",
+                        id="structured-1",
+                        input={
+                            "response": "Structured reply",
+                            "result": "ok",
+                        },
+                    ),
+                ],
+            ],
+        )
+        agent = ReActAgent(
+            name="Friday",
+            sys_prompt="You are a helpful assistant named Friday.",
+            model=model,
+            formatter=DashScopeChatFormatter(),
+            memory=InMemoryMemory(),
+            toolkit=Toolkit(),
+        )
+
+        reply_msg = await agent.reply(structured_model=StructuredReplyModel)
+
+        self.assertEqual(reply_msg.get_text_content(), "Structured reply")
+        self.assertEqual(reply_msg.metadata, {"result": "ok"})
+
+        memory_msgs = await agent.memory.get_memory()
+        self.assertEqual(
+            memory_msgs[-1].get_text_content(),
+            "Structured reply",
+        )
+        self.assertEqual(memory_msgs[-1].metadata, {"result": "ok"})
+
+    async def test_structured_output_forces_required_tool_choice(self) -> None:
+        """Structured replies must force the finish-tool choice."""
+        model = SequenceModel(
+            [
+                [
+                    ToolUseBlock(
+                        type="tool_use",
+                        name="generate_response",
+                        id="structured-required",
+                        input={
+                            "response": "Required tool choice reply",
+                            "result": "forced",
+                        },
+                    ),
+                ],
+            ],
+        )
+        agent = ReActAgent(
+            name="Friday",
+            sys_prompt="You are a helpful assistant named Friday.",
+            model=model,
+            formatter=DashScopeChatFormatter(),
+            memory=InMemoryMemory(),
+            toolkit=Toolkit(),
+        )
+
+        reply_msg = await agent.reply(structured_model=StructuredReplyModel)
+
+        self.assertEqual(
+            model.calls[0]["tool_choice"],
+            "required",
+        )
+        self.assertTrue(
+            any(
+                tool_schema["function"]["name"] == agent.finish_function_name
+                for tool_schema in model.calls[0]["tools"]
+            ),
+        )
+        self.assertEqual(
+            reply_msg.get_text_content(),
+            "Required tool choice reply",
+        )
+        self.assertEqual(reply_msg.metadata, {"result": "forced"})
+
+    async def test_structured_output_then_text_reply_preserves_metadata(
+        self,
+    ) -> None:
+        """Structured metadata should survive the follow-up text reply."""
+        model = SequenceModel(
+            [
+                [
+                    ToolUseBlock(
+                        type="tool_use",
+                        name="generate_response",
+                        id="structured-2",
+                        input={"result": "queued"},
+                    ),
+                ],
+                [
+                    TextBlock(
+                        type="text",
+                        text="Final response after structured output.",
+                    ),
+                ],
+            ],
+        )
+        agent = ReActAgent(
+            name="Friday",
+            sys_prompt="You are a helpful assistant named Friday.",
+            model=model,
+            formatter=DashScopeChatFormatter(),
+            memory=InMemoryMemory(),
+            toolkit=Toolkit(),
+        )
+
+        reply_msg = await agent.reply(structured_model=StructuredReplyModel)
+
+        self.assertEqual(
+            reply_msg.get_text_content(),
+            "Final response after structured output.",
+        )
+        self.assertEqual(reply_msg.metadata, {"result": "queued"})

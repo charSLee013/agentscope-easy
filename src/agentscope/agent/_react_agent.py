@@ -5,7 +5,7 @@
 """ReAct agent class in agentscope."""
 import asyncio
 from enum import Enum
-from typing import Type, Any, AsyncGenerator, Literal
+from typing import Type, Any, AsyncGenerator, Literal, TypedDict, cast
 
 from pydantic import BaseModel, ValidationError, Field
 
@@ -28,6 +28,14 @@ from ..token import TokenCounterBase
 from ..tool import Toolkit, ToolResponse
 from ..tracing import trace_reply
 from ..tts import TTSModelBase
+from ..types import JSONSerializableObject
+
+
+class _ActingOutcome(TypedDict):
+    """The typed outcome returned from one acting step."""
+
+    structured_output: dict[str, JSONSerializableObject] | None
+    reply_msg: Msg | None
 
 
 class _QueryRewriteModel(BaseModel):
@@ -373,7 +381,7 @@ class ReActAgent(ReActAgentBase):
             return self._sys_prompt
 
     @trace_reply
-    async def reply(  # pylint: disable=too-many-branches
+    async def reply(  # pylint: disable=too-many-branches, too-many-statements
         self,
         msg: Msg | list[Msg] | None = None,
         structured_model: Type[BaseModel] | None = None,
@@ -429,6 +437,7 @@ class ReActAgent(ReActAgentBase):
         # Cache the structured output generated in the finish function call
         structured_output = None
         reply_msg = None
+        reply_from_finish_tool = False
         for _ in range(self.max_iters):
             # -------------- Memory compression --------------
             await self._compress_memory_if_needed()
@@ -445,23 +454,37 @@ class ReActAgent(ReActAgentBase):
             ]
             # Parallel tool calls or not
             if self.parallel_tool_calls:
-                structured_outputs = await asyncio.gather(*futures)
+                acting_outcomes = await asyncio.gather(*futures)
             else:
                 # Sequential tool calls
-                structured_outputs = [await _ for _ in futures]
+                acting_outcomes = [await _ for _ in futures]
 
             # -------------- Check for exit condition --------------
             # If structured output is still not satisfied
             if self._required_structured_model:
-                # Remove None results
-                structured_outputs = [_ for _ in structured_outputs if _]
+                filtered_outcomes = [
+                    outcome
+                    for outcome in acting_outcomes
+                    if outcome is not None
+                ]
+
+                for outcome in filtered_outcomes:
+                    if outcome.get("structured_output") is not None:
+                        structured_output = outcome["structured_output"]
+
+                    if (
+                        outcome.get("reply_msg") is not None
+                        and reply_msg is None
+                    ):
+                        reply_msg = outcome["reply_msg"]
+                        reply_from_finish_tool = True
 
                 msg_hint = None
-                # If the acting step generates structured outputs
-                if structured_outputs:
-                    # Cache the structured output data
-                    structured_output = structured_outputs[-1]
+                if reply_msg is not None:
+                    break
 
+                # If the acting step generates structured outputs
+                if structured_output is not None:
                     # Prepare textual response
                     if msg_reasoning.has_content_blocks("text"):
                         # Re-use the existing text response if any to avoid
@@ -522,6 +545,9 @@ class ReActAgent(ReActAgentBase):
         if reply_msg is None:
             reply_msg = await self._summarizing()
             reply_msg.metadata = structured_output
+            await self.memory.add(reply_msg)
+        elif reply_from_finish_tool:
+            await self.print(reply_msg, True)
             await self.memory.add(reply_msg)
 
         # Post-process the memory, long-term memory
@@ -652,7 +678,10 @@ class ReActAgent(ReActAgentBase):
                     await self.print(msg_res, True)
         return msg
 
-    async def _acting(self, tool_call: ToolUseBlock) -> dict | None:
+    async def _acting(
+        self,
+        tool_call: ToolUseBlock,
+    ) -> _ActingOutcome | None:
         """Perform the acting process, and return the structured output if
         it's generated and verified in the finish function call.
 
@@ -682,14 +711,14 @@ class ReActAgent(ReActAgentBase):
             # Execute the tool call
             tool_res = await self.toolkit.call_tool_function(tool_call)
 
+            response_msg = None
+            structured_output = None
             # Async generator handling
             async for chunk in tool_res:
                 # Turn into a tool result block
                 tool_res_msg.content[0][  # type: ignore[index]
                     "output"
                 ] = chunk.content
-
-                await self.print(tool_res_msg, chunk.is_last)
 
                 # Raise the CancelledError to handle the interruption in the
                 # handle_interrupt function
@@ -702,10 +731,30 @@ class ReActAgent(ReActAgentBase):
                     and chunk.metadata
                     and chunk.metadata.get("success", False)
                 ):
-                    # Only return the structured output
-                    return chunk.metadata.get("structured_output")
+                    structured_output = cast(
+                        dict[str, JSONSerializableObject] | None,
+                        chunk.metadata.get("structured_output"),
+                    )
+                    response_text = tool_call["input"].get("response")
+                    if isinstance(response_text, str):
+                        response_msg = Msg(
+                            self.name,
+                            response_text,
+                            "assistant",
+                            metadata=structured_output,
+                        )
+                    else:
+                        await self.print(tool_res_msg, chunk.is_last)
+                else:
+                    await self.print(tool_res_msg, chunk.is_last)
 
-            return None
+            if response_msg is None and structured_output is None:
+                return None
+
+            return {
+                "structured_output": structured_output,
+                "reply_msg": response_msg,
+            }
 
         finally:
             # Record the tool result message in the memory
