@@ -54,3 +54,15 @@ description: "Rebuild core agent/tool + MCP runtime on the new easy trunk"
 - [x] T018 Run the final proof loop with `finalize_long_horizon_run.py`.
 - [x] T019 Verify `git status --short` is clean except the intended wave files.
 - [x] T020 Commit locally with message: `feat(agent-tool): rebuild core toolkit mcp and react loop on easy`.
+
+---
+
+## Phase 5: Real provider-backed MCP proof (P1)
+
+- [x] T021 Write fail-first tests for the real runtime validation helper contracts.
+- [x] T022 Run `tests/mcp_real_runtime_validation_test.py` and observe the intended failure.
+- [x] T023 Implement `specs/036-core-agent-tool-mcp-runtime/real_runtime_validation.py` with repo-`.env` loading, local MCP server lifecycle, and machine-readable evidence output.
+- [x] T024 Re-run `tests/mcp_real_runtime_validation_test.py` until green.
+- [x] T025 Run the real OpenAI-compatible MCP validation command and capture proof for result, tool trace, and manual callable behavior.
+- [x] T026 Run a read-only subagent review for the real-runtime proof block and resolve any `fix` findings.
+- [x] T027 Refresh the final verification bundle (`pytest`, `pre-commit`, finalizer) for the new proof block.

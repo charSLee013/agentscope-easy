@@ -7,7 +7,9 @@
 
 This wave rebuilds the core agent/tool path on top of the new `easy` trunk.
 It deliberately stops at the stable center: toolkit contracts, MCP runtime glue,
-and the critical ReActAgent loop fixes that do not depend on later waves.
+the critical ReActAgent loop fixes that do not depend on later waves, and one
+real provider-backed MCP proof chain that verifies the rebuilt center works in
+live execution.
 
 ## Technical Context
 
@@ -27,6 +29,7 @@ In scope:
 - Rebuild selected ReActAgent loop fixes
 - Add/update minimal SOP files for touched modules if still missing
 - Record milestone-by-milestone subagent review results
+- Add a real provider-backed MCP validation entry and evidence capture
 
 Out of scope:
 
@@ -62,6 +65,13 @@ Out of scope:
 - Run targeted tests, `pre-commit run --all-files`, and final proof loop
 - Commit locally
 
+### M5 - Real runtime proof refresh
+
+- Add fail-first tests for the real runtime validation helper contracts
+- Implement the env-driven validation script for the MCP example chain
+- Run the live provider-backed validation and capture evidence
+- Run a read-only subagent review against the new proof block and refresh the final verification bundle
+
 ## Verification
 
 - Baseline:
@@ -72,8 +82,10 @@ Out of scope:
   - `PYTHONPATH=src /Users/charslee/Repo/private/agentscope-easy/.venv/bin/pytest -p no:capture tests/react_agent_test.py -q`
 - Final:
   - `PYTHONPATH=src /Users/charslee/Repo/private/agentscope-easy/.venv/bin/pytest -p no:capture tests/toolkit_basic_test.py tests/toolkit_meta_tool_test.py tests/mcp_client_test.py tests/mcp_streamable_http_client_test.py tests/react_agent_test.py -q`
+  - `PYTHONPATH=src /Users/charslee/Repo/private/agentscope-easy/.venv/bin/pytest -p no:capture tests/mcp_real_runtime_validation_test.py -q`
+  - `PYTHONPATH=src /Users/charslee/Repo/private/agentscope-easy/.venv/bin/python specs/036-core-agent-tool-mcp-runtime/real_runtime_validation.py --env-file /Users/charslee/Repo/private/agentscope-easy/.env`
   - `/Users/charslee/Repo/private/agentscope-easy/.venv/bin/pre-commit run --all-files`
-  - `python3 ~/.codex/skills/long-horizon-runner/scripts/finalize_long_horizon_run.py --target . --require-path specs/036-core-agent-tool-mcp-runtime/spec.md --require-path specs/036-core-agent-tool-mcp-runtime/plan.md --require-path specs/036-core-agent-tool-mcp-runtime/tasks.md`
+  - `python3 ~/.codex/skills/long-horizon-runner/scripts/finalize_long_horizon_run.py --target . --require-path specs/036-core-agent-tool-mcp-runtime/spec.md --require-path specs/036-core-agent-tool-mcp-runtime/plan.md --require-path specs/036-core-agent-tool-mcp-runtime/tasks.md --require-path specs/036-core-agent-tool-mcp-runtime/real_runtime_validation.py --require-path tests/mcp_real_runtime_validation_test.py`
 
 ## Commit Target
 

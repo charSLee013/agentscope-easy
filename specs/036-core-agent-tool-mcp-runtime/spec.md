@@ -16,6 +16,9 @@
   records this wave's change flow, tasking, and acceptance only.
 - Remote updates remain user-owned. This branch may commit locally but must not
   run `git push`.
+- Final acceptance for this wave is not satisfied by fake-model tests alone;
+  it must include one real OpenAI-compatible provider run against the MCP
+  example chain, using the repo `.env` as the authoritative runtime config.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -90,6 +93,34 @@ it is also the easiest place for later-wave scope to leak in.
    **Then** the final assistant reply preserves the expected text/metadata
    behavior without introducing unrelated wave-2/wave-3 logic.
 
+---
+
+### User Story 4 - Maintainer gets a real provider-backed proof chain for wave 036 (Priority: P1)
+
+As a maintainer, I want a repo-local validation entry that runs the MCP example
+chain against the actual configured provider, so wave 036 is proven with a
+real runtime path instead of only fake-model tests.
+
+**Why this priority**: The user explicitly tightened the acceptance bar to
+"真实运行"; without this proof chain, the wave remains under-validated.
+
+**Independent Test**:
+
+- Focused helper tests cover `.env` loading precedence and tool-trace evidence
+  extraction, while the live validation script provides the real runtime proof.
+
+**Acceptance Scenarios**:
+
+1. **Given** an authoritative repo `.env`, **When** the real validation entry
+   loads OpenAI-compatible config, **Then** it prefers the `.env` values over
+   conflicting shell values for `OPENAI_API_KEY`, `OPENAI_MODEL`, and
+   `OPENAI_BASE_URL`.
+2. **Given** the local MCP add and multiply servers plus the configured real
+   provider, **When** the validation entry runs the MCP example chain,
+   **Then** the structured result is `8108887`, both `multiply` and `add`
+   appear in the tool trace, and manual `get_callable_function("add")`
+   returns the expected wrapped result.
+
 ## Edge Cases
 
 - Legacy diffs in `agent/` contain `RealtimeAgent`, `SubAgent`, and audio/TTS
@@ -131,6 +162,15 @@ it is also the easiest place for later-wave scope to leak in.
   record whether to `continue` or `fix`.
 - **FR-008**: This wave MUST end with local verification and a local commit,
   but MUST NOT perform `git push`.
+- **FR-009**: This wave MUST provide a repo-local validation entry at
+  `specs/036-core-agent-tool-mcp-runtime/real_runtime_validation.py` that:
+  - reads authoritative OpenAI-compatible settings from an explicit `.env`
+    path
+  - starts the local MCP example servers itself
+  - runs the MCP example chain through `ReActAgent + Toolkit + MCP`
+  - emits machine-readable evidence for the run
+- **FR-010**: This wave MUST add automated coverage that guards the real
+  validation helper contracts for `.env` precedence and tool-trace extraction.
 
 ## Include / Exclude Matrix
 
@@ -178,3 +218,9 @@ it is also the easiest place for later-wave scope to leak in.
   passes after each milestone.
 - **SC-006**: Final targeted tests and `pre-commit run --all-files` pass before
   local commit.
+- **SC-007**: A real-provider run of
+  `specs/036-core-agent-tool-mcp-runtime/real_runtime_validation.py`
+  succeeds with:
+  - `structured_result == 8108887`
+  - tool trace containing both `multiply` and `add`
+  - manual `add` callable returning `15`
