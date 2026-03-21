@@ -124,7 +124,8 @@ async def _wait_for_port(host: str, port: int, timeout: float) -> None:
         except OSError:
             if asyncio.get_running_loop().time() >= deadline:
                 raise TimeoutError(
-                    f"Timed out waiting for {host}:{port} to accept connections.",
+                    "Timed out waiting for "
+                    f"{host}:{port} to accept connections.",
                 ) from None
             await asyncio.sleep(0.25)
 
@@ -148,7 +149,7 @@ def _spawn_server(
         else source_root
     )
 
-    process = subprocess.Popen(
+    process = subprocess.Popen(  # pylint: disable=consider-using-with
         [python_bin, str(script_path)],
         cwd=str(script_path.parent),
         env=env,
@@ -276,9 +277,7 @@ async def run_validation(
         memory_messages = await agent.memory.get_memory()
         tool_trace = collect_tool_trace(memory_messages)
         used_tool_names = {
-            item["name"]
-            for item in tool_trace
-            if item["event"] == "tool_use"
+            item["name"] for item in tool_trace if item["event"] == "tool_use"
         }
 
         add_tool_function = await add_mcp_client.get_callable_function(
@@ -298,14 +297,16 @@ async def run_validation(
             )
 
         if not EXPECTED_TOOL_NAMES.issubset(used_tool_names):
+            tool_trace_text = json.dumps(tool_trace, indent=2)
             raise RuntimeError(
                 "Real runtime validation did not use both MCP tools.\n"
-                f"Observed tool trace: {json.dumps(tool_trace, indent=2)}",
+                f"Observed tool trace: {tool_trace_text}",
             )
 
         if manual_add_result != 15:
             raise RuntimeError(
-                f"Manual MCP callable returned {manual_add_result!r}, expected 15.",
+                "Manual MCP callable returned "
+                f"{manual_add_result!r}, expected 15.",
             )
 
         evidence = {

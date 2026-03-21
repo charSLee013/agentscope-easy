@@ -6,6 +6,7 @@ import importlib.util
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import ModuleType
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -18,7 +19,7 @@ MODULE_PATH = (
 )
 
 
-def _load_module():
+def _load_module() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "wave036_real_runtime_validation",
         MODULE_PATH,
@@ -33,7 +34,9 @@ def _load_module():
 class RealRuntimeValidationSupportTest(TestCase):
     """Contract tests for the wave-036 runtime validation helper."""
 
-    def test_env_file_is_authoritative_for_openai_runtime_settings(self) -> None:
+    def test_env_file_overrides_shell_openai_settings(
+        self,
+    ) -> None:
         """The validation script should read the repo `.env` as truth."""
         module = _load_module()
 
