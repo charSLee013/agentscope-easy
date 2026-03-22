@@ -24,6 +24,7 @@
 - tool group 的启停只通过 group 状态和 `reset_equipped_tools` 协调，不在 schema 外维护第二套隐藏开关。
 - `extended_model` 只用于扩展 tool schema；若字段与原函数 schema 冲突，应直接报错。
 - agent skill 信息由 toolkit 聚合进 system prompt，不在 agent 层复制维护第二份技能注册真相。
+- SubAgent wrapper 注册进 toolkit 后，仍然只是普通 tool function；它不能绕开 toolkit 获得“隐藏并行能力”或额外权限。
 
 ## 4. 交互调用链
 

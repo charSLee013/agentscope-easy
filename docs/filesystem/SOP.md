@@ -10,7 +10,6 @@
   - 受控 tool functions 与权限诊断
   - Host/Toolkit 最小 wiring
 - 本期明确不交付：
-  - `SubAgent` 继承链路
   - search / RAG / builtin filesystem
   - raw OS 文本 I/O
   - `AGENTSCOPE_DANGEROUS_TEXT_IO`
@@ -37,6 +36,8 @@
 - 工具注入方式固定为：
   - `Toolkit.register_tool_function(tool, preset_kwargs={"service": service})`
 - 工具 schema 不得暴露绑定后的 `service` 参数。
+- SubAgent V1 若继承 `filesystem_service`，只能继承 host 已有 `FileDomainService` 策略，不得扩权，不得创建更宽的 grant。
+- 第一方 `TaskSubAgent` 使用的 filesystem 工具也必须来自继承的 `FileDomainService.tool_functions()`。
 
 ## 4. 交互调用链
 
