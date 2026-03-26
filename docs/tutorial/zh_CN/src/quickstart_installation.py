@@ -36,8 +36,16 @@ print(agentscope.__version__)
 #
 # 为了满足不同功能的需求，AgentScope 提供了额外依赖项。
 #
+# - browser: 浏览器驱动的网页抓取兜底
 # - full: 包含模型 API 和工具函数的额外依赖项
 # - dev: 开发依赖项，包括测试和文档工具
+#
+# 对于浏览器兜底网页抓取：
+#
+# .. code-block:: bash
+#
+#       pip install "agentscope[browser]"
+#       python -m playwright install
 #
 # 以 full 模式为例，安装命令根据您的操作系统而有所不同。
 #

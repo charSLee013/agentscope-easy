@@ -150,6 +150,16 @@ Or with uv:
 uv pip install agentscope
 ```
 
+#### Browser fallback extra
+
+To enable browser-backed webpage fetching when official pages block plain HTTP
+clients:
+
+```bash
+pip install "agentscope[browser]"
+python -m playwright install
+```
+
 #### From source
 
 ```bash

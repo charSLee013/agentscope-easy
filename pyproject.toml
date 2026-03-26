@@ -138,6 +138,9 @@ rag = [
 # ------------ Evaluation ------------
 evaluate = ["ray"]
 
+# ------------ Browser fallback ------------
+browser = ["playwright>=1.47,<2"]
+
 # ------------ Full ------------
 full = [
     "agentscope[a2a]",
@@ -153,6 +156,7 @@ full = [
 dev = [
     # Include full dependencies from local package
     "agentscope[full]",
+    "agentscope[browser]",
     # Development tools
     "pre-commit",
     "pytest",

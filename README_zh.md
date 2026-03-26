@@ -148,6 +148,15 @@ pip install agentscope
 uv pip install agentscope
 ```
 
+#### 浏览器兜底 extra
+
+如果需要在官方网页屏蔽普通 HTTP 客户端时启用浏览器抓取兜底：
+
+```bash
+pip install "agentscope[browser]"
+python -m playwright install
+```
+
 #### 从源码安装
 
 ```bash
