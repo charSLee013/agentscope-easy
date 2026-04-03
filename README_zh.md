@@ -106,6 +106,7 @@ AgentScope 生态
 - [快速开始](#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
   - [安装](#%E5%AE%89%E8%A3%85)
     - [从 PyPI 安装](#%E4%BB%8E-pypi-%E5%AE%89%E8%A3%85)
+    - [浏览器兜底 extra](#%E6%B5%8F%E8%A7%88%E5%99%A8%E5%85%9C%E5%BA%95-extra)
     - [从源码安装](#%E4%BB%8E%E6%BA%90%E7%A0%81%E5%AE%89%E8%A3%85)
 - [样例](#%E6%A0%B7%E4%BE%8B)
   - [Hello AgentScope！](#hello-agentscope)
@@ -146,6 +147,15 @@ pip install agentscope
 
 ```bash
 uv pip install agentscope
+```
+
+#### 浏览器兜底 extra
+
+如果需要在官方网页屏蔽普通 HTTP 客户端时启用浏览器抓取兜底：
+
+```bash
+pip install "agentscope[browser]"
+python -m playwright install
 ```
 
 #### 从源码安装

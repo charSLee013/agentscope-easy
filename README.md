@@ -108,6 +108,7 @@ Welcome to join our community on
 - [Quickstart](#quickstart)
   - [Installation](#installation)
     - [From PyPI](#from-pypi)
+    - [Browser fallback extra](#browser-fallback-extra)
     - [From source](#from-source)
 - [Example](#example)
   - [Hello AgentScope!](#hello-agentscope)
@@ -148,6 +149,16 @@ Or with uv:
 
 ```bash
 uv pip install agentscope
+```
+
+#### Browser fallback extra
+
+To enable browser-backed webpage fetching when official pages block plain HTTP
+clients:
+
+```bash
+pip install "agentscope[browser]"
+python -m playwright install
 ```
 
 #### From source

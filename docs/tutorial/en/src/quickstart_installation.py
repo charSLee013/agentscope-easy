@@ -38,8 +38,16 @@ print(agentscope.__version__)
 # To satisfy the requirements of different functionalities, AgentScope provides
 # extra dependencies that can be installed based on your needs.
 #
+# - browser: Browser-backed webpage fetching fallback
 # - full: Including extra dependencies for model APIs and tool functions
 # - dev: Development dependencies, including testing and documentation tools
+#
+# For browser-backed webpage fetching:
+#
+# .. code-block:: bash
+#
+#       pip install "agentscope[browser]"
+#       python -m playwright install
 #
 # For example, when installing the full dependencies, the installation command varies depending on your operating system.
 #
