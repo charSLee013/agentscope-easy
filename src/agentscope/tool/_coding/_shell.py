@@ -7,6 +7,7 @@ from typing import Any
 
 from .._response import ToolResponse
 from ...message import TextBlock
+from ._subprocess import normalize_subprocess_stderr
 
 
 async def execute_shell_command(
@@ -41,7 +42,9 @@ async def execute_shell_command(
         await asyncio.wait_for(proc.wait(), timeout=timeout)
         stdout, stderr = await proc.communicate()
         stdout_str = stdout.decode("utf-8")
-        stderr_str = stderr.decode("utf-8")
+        stderr_str = normalize_subprocess_stderr(
+            stderr.decode("utf-8"),
+        )
         returncode = proc.returncode
 
     except asyncio.TimeoutError:
@@ -54,7 +57,9 @@ async def execute_shell_command(
             proc.terminate()
             stdout, stderr = await proc.communicate()
             stdout_str = stdout.decode("utf-8")
-            stderr_str = stderr.decode("utf-8")
+            stderr_str = normalize_subprocess_stderr(
+                stderr.decode("utf-8"),
+            )
             if stderr_str:
                 stderr_str += f"\n{stderr_suffix}"
             else:
