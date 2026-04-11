@@ -6,11 +6,17 @@ import os
 import warnings
 from contextvars import ContextVar
 from datetime import datetime
+from importlib import import_module
+from typing import Any
 
-import requests
 import shortuuid
 
 from ._run_config import _ConfigCls
+from ._logging import (
+    logger,
+    setup_logger,
+)
+from ._version import __version__
 
 
 def _generate_random_suffix(length: int) -> str:
@@ -40,6 +46,8 @@ _config = _ConfigCls(
     ),
 )
 
+# Raise each warning only once
+warnings.filterwarnings("once", category=DeprecationWarning)
 from . import exception
 from . import module
 from . import message
@@ -51,7 +59,6 @@ from . import agent
 from . import session
 from . import embedding
 from . import token
-from . import evaluate
 from . import pipeline
 from . import tracing
 from . import rag
@@ -60,15 +67,19 @@ from . import realtime  # noqa: F401
 from . import filesystem
 from . import browser
 
-from ._logging import (
-    logger,
-    setup_logger,
-)
-from .hooks import _equip_as_studio_hooks
-from ._version import __version__
 
-# Raise each warning only once
-warnings.filterwarnings("once", category=DeprecationWarning)
+def __getattr__(name: str) -> Any:
+    """Lazily import heavy public submodules on first access."""
+    if name == "evaluate":
+        imported_module = import_module(".evaluate", __name__)
+        globals()[name] = imported_module
+        return imported_module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    """Expose lazy public modules through dir()."""
+    return sorted([*globals(), "evaluate"])
 
 
 def init(
@@ -117,6 +128,11 @@ def init(
     setup_logger(logging_level, logging_path)
 
     if studio_url:
+        import requests
+
+        from .agent import UserAgent, StudioUserInput
+        from .hooks import _equip_as_studio_hooks
+
         # Register the run
         data = {
             "id": _config.run_id,
@@ -133,8 +149,6 @@ def init(
             json=data,
         )
         response.raise_for_status()
-
-        from .agent import UserAgent, StudioUserInput
 
         UserAgent.override_class_input_method(
             StudioUserInput(
