@@ -11,7 +11,10 @@ def test_browser_extra_stays_optional() -> None:
     text = pyproject.read_text(encoding="utf-8")
 
     assert 'browser = ["playwright' in text
-    assert 'dev = [' in text
+    assert "dev = [" in text
     assert '"agentscope[browser]"' in text
-    full_section = text.split("full = [", maxsplit=1)[1].split("]", maxsplit=1)[0]
+    full_section = text.split("full = [", maxsplit=1)[1].split(
+        "]",
+        maxsplit=1,
+    )[0]
     assert '"agentscope[browser]"' not in full_section

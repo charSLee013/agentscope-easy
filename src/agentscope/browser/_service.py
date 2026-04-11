@@ -64,7 +64,7 @@ class BrowserPageService:
         max_text_chars: int = 5000,
         force_browser: bool = False,
     ) -> BrowserFetchResult:
-        """Fetch one webpage and escalate to browser when challenge detected."""
+        """Fetch one webpage and escalate to browser on challenge pages."""
         http_error: Exception | None = None
         if not force_browser:
             try:
@@ -79,14 +79,19 @@ class BrowserPageService:
                     return result
 
         try:
-            return self._fetch_with_playwright(url, max_text_chars=max_text_chars)
+            return self._fetch_with_playwright(
+                url,
+                max_text_chars=max_text_chars,
+            )
         except ImportError as error:
             detail = (
                 f" HTTP fast path failed with: {http_error}."
                 if http_error is not None
                 else ""
             )
-            raise ImportError(self._browser_install_message() + detail) from error
+            raise ImportError(
+                self._browser_install_message() + detail,
+            ) from error
 
     def tool_functions(self) -> tuple:
         """Return the tool surface for Toolkit wiring."""

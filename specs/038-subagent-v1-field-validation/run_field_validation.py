@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
 """Run SubAgent V1 field validation against the merged easy branch."""
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import time
+from typing import TypedDict
 
 
 WHITELIST_URLS = [
@@ -123,7 +124,11 @@ class ObservedOpenAIChatModel(OpenAIChatModel):
         self.log_dir = log_dir
         self.call_index = 0
 
-    async def __call__(self, messages: list[dict], **kwargs: Any):  # type: ignore[override]
+    async def __call__(
+        self,
+        messages: list[dict],
+        **kwargs: Any,
+    ):  # type: ignore[override]
         self.call_index += 1
         call_id = self.call_index
         start = time.perf_counter()
@@ -467,6 +472,46 @@ class RunArtifacts:
     install_log: Path
 
 
+class MetricsSummary(TypedDict):
+    """Structured metrics extracted from sandbox logs."""
+
+    model_call_count: int
+    http_request_count: int
+    input_tokens: int | None
+    output_tokens: int | None
+    usage_available: bool
+
+
+class LogRecord(TypedDict, total=False):
+    """Loose JSONL record shape used by validation logs."""
+
+    ok: bool
+    url: str
+    status: int | None
+    elapsed_s: float | str | None
+    ts: str
+    event: str
+
+
+class ReportEvidence(TypedDict):
+    """Typed bundle of report evidence consumed by report rendering."""
+
+    metrics: MetricsSummary
+    event_logs: list[LogRecord]
+    http_logs: list[LogRecord]
+
+
+@dataclass(frozen=True)
+class ReportSummary:
+    """Final verdict and follow-up guidance for the report."""
+
+    verdict: str
+    rationale: str
+    p0: str
+    root_cause: str
+    next_steps: str
+
+
 def repo_root() -> Path:
     """Return the repository root for the current script."""
     return Path(__file__).resolve().parents[2]
@@ -508,7 +553,7 @@ def load_runtime_env() -> dict[str, str]:
 
 
 def discover_env_file() -> Path:
-    """Locate the effective `.env` file, including the main worktree fallback."""
+    """Locate the effective `.env` file, including main worktree fallback."""
     candidates = [repo_root() / ".env"]
     main_worktree_env = main_worktree_root() / ".env"
     if main_worktree_env not in candidates:
@@ -627,7 +672,7 @@ def run_command(
     env: dict[str, str] | None = None,
     log_path: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command, capture output, and optionally mirror it to a log file."""
+    """Run a command and optionally mirror combined output to a log file."""
     effective_env = dict(os.environ) if env is None else dict(env)
     effective_env.pop("PYTHONPATH", None)
     effective_env.pop("PYTHONHOME", None)
@@ -641,7 +686,8 @@ def run_command(
     )
     if log_path is not None:
         log_path.write_text(
-            completed.stdout + ("\n" + completed.stderr if completed.stderr else ""),
+            completed.stdout
+            + ("\n" + completed.stderr if completed.stderr else ""),
             encoding="utf-8",
         )
     return completed
@@ -654,7 +700,11 @@ def ensure_success(
 ) -> None:
     """Raise a descriptive error if the subprocess failed."""
     if completed.returncode != 0:
-        message = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
+        message = (
+            completed.stderr.strip()
+            or completed.stdout.strip()
+            or "unknown error"
+        )
         raise RuntimeError(f"{context} failed: {message}")
 
 
@@ -677,7 +727,9 @@ def build_wheel(artifacts: RunArtifacts, build_python: Path) -> Path:
     ensure_success(completed, context="wheel build")
     wheels = sorted(artifacts.wheelhouse.glob("*.whl"))
     if not wheels:
-        raise RuntimeError("wheel build succeeded but no wheel file was produced")
+        raise RuntimeError(
+            "wheel build succeeded but no wheel file was produced",
+        )
     return wheels[-1]
 
 
@@ -709,7 +761,9 @@ def python_site_packages(python_bin: Path) -> Path:
     ensure_success(completed, context="site-packages discovery")
     resolved = Path(completed.stdout.strip())
     if not resolved.exists():
-        raise RuntimeError(f"Resolved site-packages path does not exist: {resolved}")
+        raise RuntimeError(
+            f"Resolved site-packages path does not exist: {resolved}",
+        )
     return resolved
 
 
@@ -733,7 +787,7 @@ def build_dependency_layer(
     artifacts: RunArtifacts,
     seed_python: Path,
 ) -> tuple[Path, Path]:
-    """Create a filtered dependency layer without any `agentscope` artifacts."""
+    """Create a dependency layer without any `agentscope` artifacts."""
     source_site = python_site_packages(seed_python)
     layer_root = artifacts.sandbox_root / "dependency-layer"
     layer_root.mkdir(parents=True, exist_ok=True)
@@ -758,7 +812,7 @@ def attach_dependency_layer(
 
 
 def build_app_env(runtime_env: dict[str, str]) -> dict[str, str]:
-    """Build the minimal sandbox env: OPENAI config plus tiny runtime baseline."""
+    """Build the sandbox env from OpenAI config plus a tiny baseline."""
     env = {
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONNOUSERSITE": "1",
@@ -771,7 +825,11 @@ def build_app_env(runtime_env: dict[str, str]) -> dict[str, str]:
     return env
 
 
-def install_wheel(pip_bin: Path, wheel_path: Path, artifacts: RunArtifacts) -> None:
+def install_wheel(
+    pip_bin: Path,
+    wheel_path: Path,
+    artifacts: RunArtifacts,
+) -> None:
     """Install the built wheel into the sandbox virtual environment."""
     completed = run_command(
         [
@@ -821,7 +879,9 @@ def run_external_app(
         ],
         cwd=artifacts.app_dir,
         env=env,
-        log_path=artifacts.smoke_log if mode == "smoke" else artifacts.logs_dir / "full.log",
+        log_path=artifacts.smoke_log
+        if mode == "smoke"
+        else artifacts.logs_dir / "full.log",
     )
     ensure_success(completed, context=f"{mode} validation app")
     return json.loads(artifacts.output_json.read_text(encoding="utf-8"))
@@ -838,7 +898,7 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
     ]
 
 
-def summarize_metrics(logs_dir: Path) -> dict[str, object]:
+def summarize_metrics(logs_dir: Path) -> MetricsSummary:
     """Aggregate metrics from sandbox logs."""
     model_calls = read_jsonl(logs_dir / "model_calls.jsonl")
     http_requests = read_jsonl(logs_dir / "http_requests.jsonl")
@@ -860,7 +920,7 @@ def summarize_metrics(logs_dir: Path) -> dict[str, object]:
     }
 
 
-def collect_report_evidence(logs_dir: Path) -> dict[str, object]:
+def collect_report_evidence(logs_dir: Path) -> ReportEvidence:
     """Collect log-backed evidence before sandbox cleanup removes it."""
     return {
         "metrics": summarize_metrics(logs_dir),
@@ -869,116 +929,190 @@ def collect_report_evidence(logs_dir: Path) -> dict[str, object]:
     }
 
 
+def _build_report_summary(
+    *,
+    mode: str,
+    run_result: dict[str, object] | None,
+    failed_http_logs: list[LogRecord],
+    error: str | None,
+) -> ReportSummary:
+    """Build the verdict, rationale, and follow-up guidance."""
+    if error is not None:
+        root_cause = "- 验证 harness 或库消费链路在当前步骤失败。"
+        next_steps = "- 修复当前失败点后，重新从 smoke / full 入口执行。"
+        if (
+            "环境" in error
+            or "auth" in error
+            or "quota" in error
+            or "transport" in error
+        ):
+            root_cause = "- 真实 provider 环境阻塞，未能进入业务链路。"
+            next_steps = (
+                "- 校验 `.env` 凭证、provider 可达性、额度与 " + "endpoint 兼容性后重跑本波次。"
+            )
+        summary = ReportSummary(
+            verdict="不通过",
+            rationale=error,
+            p0=f"- {error}",
+            root_cause=root_cause,
+            next_steps=next_steps,
+        )
+    elif mode != "full" or run_result is None:
+        if mode == "smoke" and run_result is not None:
+            summary = ReportSummary(
+                verdict="部分通过",
+                rationale=(
+                    "仅完成 wheel + import smoke，本轮尚未执行真实 full " + "validation。"
+                ),
+                p0="- 无",
+                root_cause="- 无",
+                next_steps="- 继续执行 `--mode full` 完成实战验收。",
+            )
+        else:
+            summary = ReportSummary(
+                verdict="待运行",
+                rationale="尚未执行。",
+                p0="- 无",
+                root_cause="- 待补充",
+                next_steps="- 待补充",
+            )
+    else:
+        briefing_exists = bool(run_result.get("briefing_exists"))
+        final_text = str(run_result.get("final_text", "")).strip()
+        if briefing_exists and final_text and not failed_http_logs:
+            summary = ReportSummary(
+                verdict="通过",
+                rationale=(
+                    "真实 host -> subagent -> fetch -> write -> return "
+                    + "链路成功收敛。"
+                ),
+                p0="- 无",
+                root_cause="- 无",
+                next_steps="- 后续若要继续放量，应单独补做 timeout / 429 / 限流专项验证。",
+            )
+        elif briefing_exists and final_text:
+            first_failure = failed_http_logs[0]
+            summary = ReportSummary(
+                verdict="部分通过",
+                rationale=("真实链路写回成功，但至少一个官方源抓取失败，结果不满足" + "“双源完成”标准。"),
+                p0=(
+                    "- 官方源存在抓取失败："
+                    f"{first_failure.get('url')} "
+                    f"status={first_failure.get('status')}"
+                ),
+                root_cause=(
+                    "- 官方验证源之一对当前抓取方式返回错误，agent " + "虽然完成写回，但输入证据不完整。"
+                ),
+                next_steps=("- 优先解决失败官方源的抓取兼容性，再重跑 full " + "验证双源收敛。"),
+            )
+        elif failed_http_logs:
+            first_failure = failed_http_logs[0]
+            summary = ReportSummary(
+                verdict="部分通过",
+                rationale="真实链路已执行，但官方源 403 阻塞后没有完成降级写回。",
+                p0=(
+                    "- `/workspace/subagent/briefing.md` 未落盘；"
+                    f"{first_failure.get('url')} "
+                    f"status={first_failure.get('status')}"
+                ),
+                root_cause=(
+                    "- OpenAI 官方 URL 对当前 urllib 抓取返回 403，当前 "
+                    + "agent loop 在单源失败场景下重复重试而未及时写回。"
+                ),
+                next_steps=(
+                    "- 为官方页抓取补充兼容策略，或明确单源失败时也必须" + "先落盘部分结果，再重跑 full。"
+                ),
+            )
+        else:
+            summary = ReportSummary(
+                verdict="部分通过",
+                rationale="真实链路已执行，但最终产物或主代理收敛不完整。",
+                p0="- briefing.md 未落盘或 host 最终摘要为空。",
+                root_cause="- 真实模型对任务分解、工具调用或最终收敛存在不稳定性。",
+                next_steps="- 强化 prompt / tool description，或单独分析模型工具调用兼容性。",
+            )
+
+    return summary
+
+
+def _build_runtime_summary(
+    *,
+    mode: str,
+    run_result: dict[str, object] | None,
+) -> tuple[str, str, str, str]:
+    """Build file-write and host summary details for the report."""
+    if mode != "full":
+        return (
+            "smoke 未覆盖",
+            "smoke 未覆盖",
+            "smoke 未覆盖",
+            "smoke 未覆盖",
+        )
+
+    if run_result and bool(run_result.get("briefing_exists")):
+        file_write_status = str(run_result.get("briefing_path"))
+    elif run_result:
+        file_write_status = (
+            "未观察到真实写回（target: " f"{run_result.get('briefing_path')}）"
+        )
+    else:
+        file_write_status = "n/a"
+
+    if run_result:
+        final_text = str(run_result.get("final_text") or "").strip()
+        if final_text and bool(run_result.get("briefing_exists")):
+            host_final_text = final_text
+        elif final_text:
+            host_final_text = "模型最终摘要声称任务已完成，但未被磁盘写回证据证实：" f"{final_text}"
+        else:
+            host_final_text = "none"
+        briefing_status = str(run_result.get("briefing_exists"))
+    else:
+        host_final_text = "n/a"
+        briefing_status = "n/a"
+
+    tool_trace_summary = (
+        "本轮通过 host 最终收敛与 workspace 产物验证，不额外保留 "
+        "ignored 原始 ToolResponse.metadata"
+    )
+    return (
+        file_write_status,
+        host_final_text,
+        tool_trace_summary,
+        briefing_status,
+    )
+
+
 def render_report(
     *,
     mode: str,
-    runtime_env: dict[str, str],
     artifacts: RunArtifacts,
     run_result: dict[str, object] | None,
     build_python: Path | None,
     dependency_site_packages: Path | None,
     dependency_source_site: Path | None,
-    evidence: dict[str, object],
+    evidence: ReportEvidence,
     error: str | None = None,
 ) -> str:
     """Render the tracked markdown validation report."""
     metrics = evidence["metrics"]
     event_logs = evidence["event_logs"]
     http_logs = evidence["http_logs"]
-    verdict = "待运行"
-    rationale = "尚未执行。"
-    p0 = "- 无"
-    root_cause = "- 待补充"
-    next_steps = "- 待补充"
     failed_http_logs = [
         item for item in http_logs if not bool(item.get("ok", False))
     ]
-
-    if error is not None:
-        verdict = "不通过"
-        rationale = error
-        p0 = f"- {error}"
-        if "环境" in error or "auth" in error or "quota" in error or "transport" in error:
-            root_cause = "- 真实 provider 环境阻塞，未能进入业务链路。"
-            next_steps = "- 校验 `.env` 凭证、provider 可达性、额度与 endpoint 兼容性后重跑本波次。"
-        else:
-            root_cause = "- 验证 harness 或库消费链路在当前步骤失败。"
-            next_steps = "- 修复当前失败点后，重新从 smoke / full 入口执行。"
-    elif mode == "full" and run_result is not None:
-        briefing_exists = bool(run_result.get("briefing_exists"))
-        final_text = str(run_result.get("final_text", "")).strip()
-        if briefing_exists and final_text and not failed_http_logs:
-            verdict = "通过"
-            rationale = "真实 host -> subagent -> fetch -> write -> return 链路成功收敛。"
-            root_cause = "- 无"
-            next_steps = "- 后续若要继续放量，应单独补做 timeout / 429 / 限流专项验证。"
-        elif briefing_exists and final_text:
-            verdict = "部分通过"
-            rationale = "真实链路写回成功，但至少一个官方源抓取失败，结果不满足“双源完成”标准。"
-            first_failure = failed_http_logs[0]
-            p0 = (
-                "- 官方源存在抓取失败："
-                f"{first_failure.get('url')} status={first_failure.get('status')}"
-            )
-            root_cause = "- 官方验证源之一对当前抓取方式返回错误，agent 虽然完成写回，但输入证据不完整。"
-            next_steps = "- 优先解决失败官方源的抓取兼容性，再重跑 full 验证双源收敛。"
-        else:
-            verdict = "部分通过"
-            if failed_http_logs:
-                first_failure = failed_http_logs[0]
-                rationale = "真实链路已执行，但官方源 403 阻塞后没有完成降级写回。"
-                p0 = (
-                    "- `/workspace/subagent/briefing.md` 未落盘；"
-                    f"{first_failure.get('url')} status={first_failure.get('status')}"
-                )
-                root_cause = "- OpenAI 官方 URL 对当前 urllib 抓取返回 403，当前 agent loop 在单源失败场景下重复重试而未及时写回。"
-                next_steps = "- 为官方页抓取补充兼容策略，或明确单源失败时也必须先落盘部分结果，再重跑 full。"
-            else:
-                rationale = "真实链路已执行，但最终产物或主代理收敛不完整。"
-                p0 = "- briefing.md 未落盘或 host 最终摘要为空。"
-                root_cause = "- 真实模型对任务分解、工具调用或最终收敛存在不稳定性。"
-                next_steps = "- 强化 prompt / tool description，或单独分析模型工具调用兼容性。"
-    elif mode == "smoke" and run_result is not None:
-        verdict = "部分通过"
-        rationale = "仅完成 wheel + import smoke，本轮尚未执行真实 full validation。"
-        root_cause = "- 无"
-        next_steps = "- 继续执行 `--mode full` 完成实战验收。"
-
-    if mode == "full":
-        if run_result and bool(run_result.get("briefing_exists")):
-            file_write_status = str(run_result.get("briefing_path"))
-        elif run_result:
-            file_write_status = (
-                "未观察到真实写回（target: "
-                f"{run_result.get('briefing_path')}）"
-            )
-        else:
-            file_write_status = "n/a"
-        if run_result:
-            final_text = str(run_result.get("final_text") or "").strip()
-            if final_text and bool(run_result.get("briefing_exists")):
-                host_final_text = final_text
-            elif final_text:
-                host_final_text = (
-                    "模型最终摘要声称任务已完成，但未被磁盘写回证据证实："
-                    f"{final_text}"
-                )
-            else:
-                host_final_text = "none"
-        else:
-            host_final_text = "n/a"
-        tool_trace_summary = (
-            "本轮通过 host 最终收敛与 workspace 产物验证，不额外保留 "
-            "ignored 原始 ToolResponse.metadata"
-        )
-        briefing_status = (
-            run_result.get("briefing_exists") if run_result else "n/a"
-        )
-    else:
-        file_write_status = "smoke 未覆盖"
-        host_final_text = "smoke 未覆盖"
-        tool_trace_summary = "smoke 未覆盖"
-        briefing_status = "smoke 未覆盖"
+    summary = _build_report_summary(
+        mode=mode,
+        run_result=run_result,
+        failed_http_logs=failed_http_logs,
+        error=error,
+    )
+    (
+        file_write_status,
+        host_final_text,
+        tool_trace_summary,
+        briefing_status,
+    ) = _build_runtime_summary(mode=mode, run_result=run_result)
 
     build_command = (
         shlex.join(
@@ -1017,7 +1151,9 @@ def render_report(
         or "  - none"
     )
     briefing_excerpt = (
-        str(run_result.get("briefing_excerpt", "")) if run_result is not None else ""
+        str(run_result.get("briefing_excerpt", ""))
+        if run_result is not None
+        else ""
     )
     if mode == "full" and run_result is not None:
         workspace_snapshot_items = run_result.get("workspace_snapshot", [])
@@ -1033,6 +1169,44 @@ def render_report(
         if artifacts.sandbox_root.exists()
         else f"removed {artifacts.sandbox_root}"
     )
+    scenario_description = (
+        "host agent 以外部依赖方式调用 `register_subagent("
+        "TaskSubAgent, ...)`，委派子代理抓取官方文档、提炼比较结论，"
+        "并写回 `briefing.md`"
+    )
+    capability_boundary = (
+        "本轮按 shipped `SubAgent V1` 的串行 delegation 语义验证，"
+        "不把后台异步 subagent 视为已实现能力"
+    )
+    pip_path = (
+        artifacts.venv_root / ("Scripts" if os.name == "nt" else "bin") / "pip"
+    )
+    dependency_layer_text = str(
+        dependency_site_packages if dependency_site_packages else "n/a",
+    )
+    dependency_source_text = str(
+        dependency_source_site if dependency_source_site else "n/a",
+    )
+    dependency_source_summary = (
+        f"`{dependency_layer_text}`"
+        f"（源：`{dependency_source_text}`，"
+        "已过滤 `agentscope` editable / dist-info）"
+    )
+    env_injection_text = (
+        "业务配置仅注入 `OPENAI_API_KEY` / `OPENAI_MODEL` / "
+        "`OPENAI_BASE_URL`；另保留最小运行时基线 env（如 `HOME`、"
+        "`PATH`、`TMPDIR`、证书变量）"
+    )
+    import_smoke_result = (
+        run_result.get("agentscope_import_ok") if run_result else "n/a"
+    )
+    import_source = (
+        run_result.get("agentscope_module_path") if run_result else "n/a"
+    )
+    subagent_tool_name = (
+        run_result.get("subagent_tool_name") if run_result else "n/a"
+    )
+    elapsed_seconds = run_result.get("elapsed_s") if run_result else "n/a"
     report_text = f"""\
         # SubAgent V1 实战验证报告
 
@@ -1045,10 +1219,10 @@ def render_report(
 
         ## 1. 场景描述
 
-        - 验证任务：host agent 以外部依赖方式调用 `register_subagent(TaskSubAgent, ...)`，委派子代理抓取官方文档、提炼比较结论，并写回 `briefing.md`
+        - 验证任务：{scenario_description}
         - Host / SubAgent 角色关系：host 负责监督与最终收敛；`TaskSubAgent` 负责抓取、整理与写回
         - 真实写回产物：`/workspace/subagent/briefing.md`
-        - 当前能力边界说明：本轮按 shipped `SubAgent V1` 的串行 delegation 语义验证，不把后台异步 subagent 视为已实现能力
+        - 当前能力边界说明：{capability_boundary}
 
         ## 2. 外部参考来源
 
@@ -1063,15 +1237,15 @@ def render_report(
         - worktree：`{repo_root()}`
         - sandbox：`{artifacts.sandbox_root}`
         - wheel 构建方式：`{build_command}`
-        - wheel 安装方式：`{artifacts.venv_root / ('Scripts' if os.name == 'nt' else 'bin') / 'pip'} install --no-index --no-deps <wheel>`
-        - 依赖层来源：`{dependency_site_packages if dependency_site_packages else 'n/a'}`（源：`{dependency_source_site if dependency_source_site else 'n/a'}`，已过滤 `agentscope` editable / dist-info）
-        - `.env` 注入方式：业务配置仅注入 `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL`；另保留最小运行时基线 env（如 `HOME`、`PATH`、`TMPDIR`、证书变量）
-        - base import smoke 结果：{run_result.get('agentscope_import_ok') if run_result else 'n/a'}
-        - `agentscope` 导入来源：`{run_result.get('agentscope_module_path') if run_result else 'n/a'}`
+        - wheel 安装方式：`{pip_path} install --no-index --no-deps <wheel>`
+        - 依赖层来源：{dependency_source_summary}
+        - `.env` 注入方式：{env_injection_text}
+        - base import smoke 结果：{import_smoke_result}
+        - `agentscope` 导入来源：`{import_source}`
 
         ## 4. 执行过程关键日志摘要
 
-        - Host 注册子代理：`{run_result.get('subagent_tool_name') if run_result else 'n/a'}`
+        - Host 注册子代理：`{subagent_tool_name}`
         - 子代理启动：
         {event_summary}
         - 官方页面抓取：
@@ -1081,7 +1255,7 @@ def render_report(
 
         ## 5. 指标与结果
 
-        - 总耗时：`{run_result.get('elapsed_s') if run_result else 'n/a'}`
+        - 总耗时：`{elapsed_seconds}`
         - 模型调用次数：`{metrics['model_call_count']}`
         - HTTP 请求次数：`{metrics['http_request_count']}`
         - token / usage：`{usage_text}`
@@ -1094,20 +1268,20 @@ def render_report(
 
         ## 7. 最终结论
 
-        - Verdict：{verdict}
-        - 判定依据：{rationale}
+        - Verdict：{summary.verdict}
+        - 判定依据：{summary.rationale}
 
         ## 8. P0 缺口
 
-        {p0}
+        {summary.p0}
 
         ## 9. 根因分析
 
-        {root_cause}
+        {summary.root_cause}
 
         ## 10. 收敛路径
 
-        {next_steps}
+        {summary.next_steps}
 
         ## 11. 清理结果
 
@@ -1124,7 +1298,9 @@ def render_report(
         {briefing_excerpt}
         ```
         """
-    return textwrap.dedent(report_text).replace("\n        ", "\n").strip() + "\n"
+    return (
+        textwrap.dedent(report_text).replace("\n        ", "\n").strip() + "\n"
+    )
 
 
 def cleanup_sandbox(artifacts: RunArtifacts) -> None:
@@ -1141,7 +1317,7 @@ def run_mode(mode: str) -> int:
     build_python: Path | None = None
     dependency_site_packages: Path | None = None
     dependency_source_site: Path | None = None
-    evidence: dict[str, object] = {
+    evidence: ReportEvidence = {
         "metrics": {
             "model_call_count": 0,
             "http_request_count": 0,
@@ -1184,7 +1360,6 @@ def run_mode(mode: str) -> int:
 
     report_text = render_report(
         mode=mode,
-        runtime_env=runtime_env or {},
         artifacts=artifacts,
         run_result=run_result,
         build_python=build_python,
@@ -1198,7 +1373,6 @@ def run_mode(mode: str) -> int:
     # Rewrite report once more so the cleanup section reflects the final state.
     final_report = render_report(
         mode=mode,
-        runtime_env=runtime_env or {},
         artifacts=artifacts,
         run_result=run_result,
         build_python=build_python,

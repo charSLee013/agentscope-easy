@@ -27,10 +27,13 @@ class _FakeResponse:
 
 
 def test_http_success_stays_on_fast_path() -> None:
-    """Normal pages should return from the HTTP path without browser fallback."""
+    """Normal pages should return from the HTTP path only."""
     service = BrowserPageService(
         _requests_get=lambda *_args, **_kwargs: _FakeResponse(
-            "<html><title>Example</title><body>Hello browser fallback</body></html>",
+            (
+                "<html><title>Example</title>"
+                "<body>Hello browser fallback</body></html>"
+            ),
         ),
     )
 
@@ -50,7 +53,8 @@ def test_challenge_response_falls_back_to_browser() -> None:
         _requests_get=lambda *_args, **_kwargs: _FakeResponse(
             (
                 "<html><head><title>Just a moment...</title></head>"
-                "<body><script src='/cdn-cgi/challenge-platform/invisible.js'></script></body></html>"
+                "<body><script src='/cdn-cgi/challenge-platform/"
+                "invisible.js'></script></body></html>"
             ),
             status_code=403,
             server="cloudflare",
@@ -144,14 +148,18 @@ def test_challenge_detection_is_narrow() -> None:
     """Challenge detection should not trigger on normal successful pages."""
     service = BrowserPageService(
         _requests_get=lambda *_args, **_kwargs: _FakeResponse(
-            "<html><title>Anthropic</title><body>Built a multi-agent research system</body></html>",
+            (
+                "<html><title>Anthropic</title>"
+                "<body>Built a multi-agent research system</body></html>"
+            ),
             status_code=200,
             server="cloudflare",
         ),
     )
 
     result = service.fetch_page(
-        "https://www.anthropic.com/engineering/built-multi-agent-research-system",
+        "https://www.anthropic.com/engineering/"
+        "built-multi-agent-research-system",
     )
 
     assert result.fetch_mode == "http"

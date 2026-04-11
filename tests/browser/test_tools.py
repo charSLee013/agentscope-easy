@@ -38,10 +38,7 @@ class BrowserToolTest(IsolatedAsyncioTestCase):
         """Toolkit schemas should not expose the injected service argument."""
         schema = self.toolkit.get_json_schemas()[0]
         assert schema["function"]["name"] == "fetch_webpage"
-        assert (
-            "service"
-            not in schema["function"]["parameters"]["properties"]
-        )
+        assert "service" not in schema["function"]["parameters"]["properties"]
 
     async def test_tool_executes_with_service_injection(self) -> None:
         """Browser fetch tool should execute successfully through Toolkit."""
