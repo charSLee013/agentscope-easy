@@ -6,6 +6,7 @@ import platform
 import sys
 import tempfile
 from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, patch
 
 import shortuuid
 
@@ -20,6 +21,27 @@ from agentscope.tool import (
 
 class ToolTest(IsolatedAsyncioTestCase):
     """Test cases for the tool module."""
+
+    class _FakeSubprocess:
+        """A minimal fake subprocess for tool execution tests."""
+
+        def __init__(
+            self,
+            stdout: bytes = b"",
+            stderr: bytes = b"",
+            returncode: int = 0,
+        ) -> None:
+            self._stdout = stdout
+            self._stderr = stderr
+            self.returncode = returncode
+
+        async def wait(self) -> int:
+            """Return immediately like a finished process."""
+            return self.returncode
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            """Return captured process output."""
+            return self._stdout, self._stderr
 
     def setUp(self) -> None:
         """Set up the test environment."""
@@ -150,6 +172,78 @@ print("456")"""
             "<stderr>TimeoutError: The command execution exceeded "
             "the timeout of 2 seconds.</stderr>",
             actual,
+        )
+
+    async def test_execute_python_code_filters_grpc_fork_noise(self) -> None:
+        """gRPC fork noise should not leak into tool stderr."""
+        fake_proc = self._FakeSubprocess(
+            stderr=(
+                b"I0411 03:34:17.517323   62093 ev_poll_posix.cc:593] "
+                b"FD from fork parent still in poll list: fd(36, "
+                b"generation: 1)\n"
+            ),
+        )
+
+        with patch(
+            "agentscope.tool._coding._python.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=fake_proc),
+        ):
+            res = await execute_python_code(code="a = 1 + 1")
+
+        self.assertEqual(
+            "<returncode>0</returncode>"
+            "<stdout></stdout>"
+            "<stderr></stderr>",
+            res.content[0]["text"],
+        )
+
+    async def test_execute_shell_command_filters_grpc_fork_noise(self) -> None:
+        """Shell tool should strip parent-process gRPC fork noise."""
+        fake_proc = self._FakeSubprocess(
+            stdout=b"Hello, World!\n",
+            stderr=(
+                b"I0411 03:34:17.822017   62123 ev_poll_posix.cc:593] "
+                b"FD from fork parent still in poll list: fd(36, "
+                b"generation: 1)\n"
+            ),
+        )
+
+        with patch(
+            "agentscope.tool._coding._shell.asyncio.create_subprocess_shell",
+            new=AsyncMock(return_value=fake_proc),
+        ):
+            res = await execute_shell_command(command="echo 'Hello, World!'")
+
+        self.assertEqual(
+            "<returncode>0</returncode>"
+            "<stdout>Hello, World!\n</stdout>"
+            "<stderr></stderr>",
+            res.content[0]["text"],
+        )
+
+    async def test_execute_shell_command_keeps_real_stderr(self) -> None:
+        """Real stderr should survive even when gRPC fork noise is present."""
+        fake_proc = self._FakeSubprocess(
+            stderr=(
+                b"I0411 03:34:17.822017   62123 ev_poll_posix.cc:593] "
+                b"FD from fork parent still in poll list: fd(36, "
+                b"generation: 1)\n"
+                b"real error\n"
+            ),
+            returncode=1,
+        )
+
+        with patch(
+            "agentscope.tool._coding._shell.asyncio.create_subprocess_shell",
+            new=AsyncMock(return_value=fake_proc),
+        ):
+            res = await execute_shell_command(command="bad-command")
+
+        self.assertEqual(
+            "<returncode>1</returncode>"
+            "<stdout></stdout>"
+            "<stderr>real error\n</stderr>",
+            res.content[0]["text"],
         )
 
     async def test_view_text_file(self) -> None:

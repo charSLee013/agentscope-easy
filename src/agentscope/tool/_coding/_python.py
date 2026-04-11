@@ -12,6 +12,7 @@ import shortuuid
 
 from ...message import TextBlock
 from .._response import ToolResponse
+from ._subprocess import normalize_subprocess_stderr
 
 
 async def execute_python_code(
@@ -56,7 +57,9 @@ async def execute_python_code(
             await asyncio.wait_for(proc.wait(), timeout=timeout)
             stdout, stderr = await proc.communicate()
             stdout_str = stdout.decode("utf-8")
-            stderr_str = stderr.decode("utf-8")
+            stderr_str = normalize_subprocess_stderr(
+                stderr.decode("utf-8"),
+            )
             returncode = proc.returncode
 
         except asyncio.TimeoutError:
@@ -69,7 +72,9 @@ async def execute_python_code(
                 proc.terminate()
                 stdout, stderr = await proc.communicate()
                 stdout_str = stdout.decode("utf-8")
-                stderr_str = stderr.decode("utf-8")
+                stderr_str = normalize_subprocess_stderr(
+                    stderr.decode("utf-8"),
+                )
                 if stderr_str:
                     stderr_str += f"\n{stderr_suffix}"
                 else:
