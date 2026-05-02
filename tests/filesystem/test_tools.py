@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest import IsolatedAsyncioTestCase
 
-from agentscope.filesystem import InMemoryFileSystem
-from agentscope.filesystem._service import FileDomainService
-from agentscope.filesystem._tools import (
+from agentscope.filesystem import (
+    FileDomainService,
+    InMemoryFileSystem,
     fs_describe_permissions_markdown,
     list_allowed_directories,
     read_text_file,
@@ -199,3 +199,23 @@ class FilesystemToolTest(IsolatedAsyncioTestCase):
         text = result.content[0]["text"]
         assert "line3: gamma" in text
         assert "line4: delta" in text
+
+    def test_tool_functions_exact_surface(self) -> None:
+        """FileDomainService.tool_functions() must export exactly this surface."""
+        expected = [
+            "read_text_file",
+            "read_multiple_files",
+            "list_directory",
+            "get_file_info",
+            "list_allowed_directories",
+            "write_file",
+            "delete_file",
+            "edit_file",
+            "fs_describe_permissions_markdown",
+        ]
+        actual = [t.__name__ for t in self.service.tool_functions()]
+        assert actual == expected, (
+            f"tool_functions() surface mismatch.\n"
+            f"Expected: {expected}\n"
+            f"Actual:   {actual}"
+        )

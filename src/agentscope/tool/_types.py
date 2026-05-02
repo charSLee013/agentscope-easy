@@ -152,5 +152,5 @@ class AgentSkill(TypedDict):
     """The name of the skill."""
     description: str
     """The description of the skill."""
-    dir: str
-    """The directory of the agent skill."""
+    logical_dir: str
+    """The logical directory path for model prompts (e.g., /internal/...)."""

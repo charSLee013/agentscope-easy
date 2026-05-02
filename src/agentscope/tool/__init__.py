@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
-"""The tool module in agentscope."""
+"""The tool module in agentscope.
+
+For file operations, use ``agentscope.filesystem`` with ``FileDomainService``.
+"""
 
 from ._response import ToolResponse
 from ._coding import (
     execute_python_code,
     execute_shell_command,
-)
-from ._text_file import (
-    view_text_file,
-    write_text_file,
-    insert_text_file,
 )
 from ._multi_modality import (
     dashscope_text_to_image,
@@ -29,9 +27,6 @@ __all__ = [
     "ToolResponse",
     "execute_python_code",
     "execute_shell_command",
-    "view_text_file",
-    "write_text_file",
-    "insert_text_file",
     "dashscope_text_to_image",
     "dashscope_text_to_audio",
     "dashscope_image_to_text",
