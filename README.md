@@ -110,6 +110,7 @@ Welcome to join our community on
     - [From PyPI](#from-pypi)
     - [Browser fallback extra](#browser-fallback-extra)
     - [From source](#from-source)
+    - [Controlled filesystem path](#controlled-filesystem-path)
 - [Example](#example)
   - [Hello AgentScope!](#hello-agentscope)
   - [Voice Agent](#voice-agent)

@@ -108,6 +108,7 @@ AgentScope 生态
     - [从 PyPI 安装](#%E4%BB%8E-pypi-%E5%AE%89%E8%A3%85)
     - [浏览器兜底 extra](#%E6%B5%8F%E8%A7%88%E5%99%A8%E5%85%9C%E5%BA%95-extra)
     - [从源码安装](#%E4%BB%8E%E6%BA%90%E7%A0%81%E5%AE%89%E8%A3%85)
+    - [受控文件系统主线](#%E5%8F%97%E6%8E%A7%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%E4%B8%BB%E7%BA%BF)
 - [样例](#%E6%A0%B7%E4%BE%8B)
   - [Hello AgentScope！](#hello-agentscope)
   - [语音智能体](#%E8%AF%AD%E9%9F%B3%E6%99%BA%E8%83%BD%E4%BD%93)
