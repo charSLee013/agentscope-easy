@@ -19,13 +19,11 @@
 .. tip:: MCP（模型上下文协议）的支持请参考 :ref:`mcp` 部分。
 """
 import asyncio
-import inspect
 import json
 from typing import Any, AsyncGenerator
 
 from pydantic import BaseModel, Field
 
-import agentscope
 from agentscope.message import TextBlock, ToolUseBlock
 from agentscope.tool import ToolResponse, Toolkit, execute_python_code
 
@@ -55,13 +53,28 @@ def tool_function(a: int, b: str) -> ToolResponse:
 # %%
 # .. tip:: 实例方法和类方法也可以用作工具函数，``Toolkit`` 中将自动忽略 ``self`` 和 ``cls`` 参数。
 #
-# AgentScope 在 ``agentscope.tool`` 模块下提供了几个内置工具函数，如 ``execute_python_code``、``execute_shell_command`` 和文本文件读写函数。
+# AgentScope 在 ``agentscope.tool`` 模块下提供了几个内置工具函数，
+# 如 ``execute_python_code``、``execute_shell_command``。
+# 面向模型的文件访问应使用 ``agentscope.filesystem`` 与 ``FileDomainService``。
 #
-
-print("内置工具函数：")
-for _ in agentscope.tool.__all__:
-    if _ not in ["Toolkit", "ToolResponse"]:
-        print(_)
+# 最小 filesystem 接线示例：
+#
+# .. code-block:: python
+#
+#     from agentscope.filesystem import InMemoryFileSystem, FileDomainService
+#     from agentscope.tool import Toolkit
+#
+#     fs = InMemoryFileSystem()
+#     handle = fs.create_handle([
+#         {
+#             "prefix": "/workspace/",
+#             "ops": {"list", "file", "read_file", "write", "delete"},
+#         },
+#     ])
+#     service = FileDomainService(handle)
+#     toolkit = Toolkit()
+#     for tool in service.tool_functions():
+#         toolkit.register_tool_function(tool, preset_kwargs={"service": service})
 
 # %%
 # 工具模块（Toolkit）
@@ -161,9 +174,9 @@ asyncio.run(example_tool_execution())
 #
 
 
-# 示例工具函数
-def tool_function(**kwargs: Any) -> ToolResponse:
-    """一个工具函数"""
+# 示例工具函数（kwargs 参数变体）
+def tool_function_kwargs_example(**kwargs: Any) -> ToolResponse:
+    """一个接受任意关键字参数的示例工具函数。"""
     return ToolResponse(
         content=[
             TextBlock(

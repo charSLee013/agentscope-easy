@@ -3,55 +3,115 @@
 # noqa: E402
 import asyncio
 import os
+import tempfile
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from agentscope.agent import ReActAgent
+from agentscope.filesystem import DiskFileSystem, FileDomainService
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg, TextBlock
 from agentscope.model import DashScopeChatModel
-from agentscope.tool import ToolResponse, Toolkit, view_text_file
+from agentscope.tool import ToolResponse, Toolkit
 
-load_dotenv()
+_WORKSPACE_README_PATH = "/workspace/README.md"
+_DEMO_ROOT: Path | None = None
+
+
+def _demo_root() -> Path:
+    """Return the shared host root used by the ReMe demo."""
+    global _DEMO_ROOT  # pylint: disable=global-statement
+    if _DEMO_ROOT is None:
+        _DEMO_ROOT = Path(tempfile.mkdtemp(prefix="agentscope-reme-fs-"))
+    return _DEMO_ROOT
+
+
+def _workspace_dir() -> Path:
+    """Return the demo workspace directory shared by tools and offload."""
+    return _demo_root() / "workspace"
+
+
+def _reme_store_dir() -> Path:
+    """Return the offload directory under the demo workspace."""
+    return _workspace_dir() / "reme"
+
+
+def _source_readme_path() -> Path:
+    """Return the repository README path used to seed the demo workspace."""
+    return Path(__file__).resolve().parents[4] / "README.md"
+
+
+def _seed_workspace_readme(service: FileDomainService) -> str:
+    """Write the repository README into the logical workspace and read it back."""
+    readme_content = _source_readme_path().read_text(encoding="utf-8")
+    service.write_file(_WORKSPACE_README_PATH, readme_content)
+    return service.read_text_file(_WORKSPACE_README_PATH)
+
+
+async def _grep_workspace(
+    service: FileDomainService,
+    file_path: str,
+    pattern: str,
+    limit: str,
+) -> ToolResponse:
+    """Search for regex patterns in files."""
+    matches = service.read_re(file_path, pattern)
+    output = "\n".join(matches[: int(limit)])
+    return ToolResponse(content=[TextBlock(type="text", text=output)])
+
+
+async def _read_workspace_file(
+    service: FileDomainService,
+    file_path: str,
+    offset: int,
+    limit: int,
+) -> ToolResponse:
+    """Read and number a slice of a logical workspace file."""
+    raw = service.read_text_file(
+        file_path,
+        start_line=offset + 1,
+        read_lines=limit,
+    )
+    lines = raw.splitlines()
+    numbered = [f"line{offset + i + 1}: {line}" for i, line in enumerate(lines)]
+    return ToolResponse(content=[TextBlock(type="text", text="\n".join(numbered))])
 
 
 async def main() -> None:
     """Main function demonstrating ReMeShortTermMemory with tool usage."""
     from reme_short_term_memory import ReMeShortTermMemory
 
+    load_dotenv()
     toolkit = Toolkit()
 
-    async def grep(file_path: str, pattern: str, limit: str) -> ToolResponse:
-        """A powerful search tool for finding patterns in files using regular
-        expressions.
+    # Setup filesystem service
+    fs = DiskFileSystem(
+        root_dir=str(_demo_root()),
+        workspace_dir=str(_workspace_dir()),
+    )
+    handle = fs.create_handle(
+        [
+            {
+                "prefix": "/workspace/",
+                "ops": {"list", "file", "read_binary", "read_file", "read_re", "write", "delete"},
+            },
+        ],
+    )
+    service = FileDomainService(handle)
 
-        Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+"),
-        glob pattern filtering, and result limiting. Ideal for searching code
-        or text content across multiple files.
+    async def grep(file_path: str, pattern: str, limit: str) -> ToolResponse:
+        """Search for regex patterns in files.
 
         Args:
             file_path (`str`):
-                The path to the file to search in. Can be an absolute or
-                relative path.
+                Absolute logical path (must be under /workspace/ in this example).
             pattern (`str`):
-                The search pattern or regular expression to match. Supports
-                full regex syntax for complex pattern matching.
+                The search pattern or regular expression to match.
             limit (`str`):
-                The maximum number of matching results to return. Use this to
-                control output size for large files. Should not exceed 50.
+                Maximum number of regex match fragments to return.
         """
-        from reme_ai.retrieve.working import GrepOp
-
-        op = GrepOp()
-        await op.async_call(file_path=file_path, pattern=pattern, limit=limit)
-        return ToolResponse(
-            content=[
-                TextBlock(
-                    type="text",
-                    text=op.output,
-                ),
-            ],
-        )
+        return await _grep_workspace(service, file_path, pattern, limit)
 
     async def read_file(
         file_path: str,
@@ -69,8 +129,7 @@ async def main() -> None:
 
         Args:
             file_path (`str`):
-                The path to the file to read. Can be an absolute or relative
-                path.
+                Absolute logical path (must start with /, e.g. /workspace/filename).
             offset (`int`):
                 The starting line number to read from (0-indexed). Use this to
                 skip to a specific position in the file.
@@ -80,7 +139,7 @@ async def main() -> None:
                 not exceed 100.
         """
 
-        return await view_text_file(file_path, ranges=[offset, offset + limit])
+        return await _read_workspace_file(service, file_path, offset, limit)
 
     # These two tools are provided as examples. You can replace them with your
     # own retrieval tools, such as vector database embedding retrieval or other
@@ -106,14 +165,12 @@ async def main() -> None:
         max_tool_message_tokens=2000,
         group_token_threshold=None,  # Max tokens per compression batch
         keep_recent_count=1,  # Set to 1 for demo; use 10 in production
-        store_dir="inmemory",
+        store_dir=str(_reme_store_dir()),
     )
 
     async with short_term_memory:
         # Simulate ultra long context
-        f = open("../../../../README.md", encoding="utf-8")
-        readme_content = f.read()
-        f.close()
+        readme_content = _seed_workspace_readme(service)
 
         memories = [
             {

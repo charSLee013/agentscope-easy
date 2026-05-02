@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Set up an A2A server with a ReAct agent to handle the input query"""
 import os
+import tempfile
 import uuid
 import copy
 from typing import AsyncGenerator, Any
@@ -11,7 +12,6 @@ from a2a.types import (
     Task,
     TaskStatus,
     TaskState,
-    Message,
     MessageSendParams,
     TaskStatusUpdateEvent,
 )
@@ -21,15 +21,14 @@ from agent_card import agent_card
 from prompt_builder import get_ui_prompt
 from a2ui_utils import (
     pre_process_request_with_ui_event,
-    post_process_a2a_message_for_ui,
 )
+from runtime_helpers import build_sample_toolkit, prepare_final_a2a_message
 from agentscope._logging import logger
 from agentscope.agent import ReActAgent
 from agentscope.formatter import DashScopeChatFormatter, A2AChatFormatter
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages
 from agentscope.session import JSONSession
-from agentscope.message import Msg
 
 
 class SimpleStreamHandler:
@@ -41,46 +40,10 @@ class SimpleStreamHandler:
     message handling, and manages session state for conversation continuity.
     """
 
-    async def _prepare_final_message(
-        self,
-        formatter: A2AChatFormatter,
-        final_msg: Msg | None,
-    ) -> Message:
-        """Prepare the final message for response.
-
-        Args:
-            formatter (`A2AChatFormatter`):
-                The A2AChatFormatter instance.
-            final_msg (`Msg | None`, optional):
-                The final message if available.
-
-        Returns:
-            `Message`:
-                The prepared final message.
-        """
-        logger.info(
-            "--- Processing final response, final_msg: %s ---",
-            final_msg is not None,
+    def __init__(self) -> None:
+        self._session_dir = tempfile.mkdtemp(
+            prefix="agentscope-a2ui-sessions-",
         )
-
-        if final_msg is not None:
-            logger.info("--- Using final message for final message ---")
-            final_a2a_message = await formatter.format(
-                [final_msg],
-            )
-        else:
-            logger.info(
-                "--- Using last complete message for final message ---",
-            )
-
-        logger.info(
-            "--- Post-processing message for UI: %s ---",
-            final_a2a_message,
-        )
-        final_a2a_message = post_process_a2a_message_for_ui(
-            final_a2a_message,
-        )
-        return final_a2a_message
 
     async def on_message_send(
         self,  # pylint: disable=unused-argument
@@ -114,6 +77,8 @@ class SimpleStreamHandler:
         async for event in self.on_message_send_stream(
             params,
             *args,
+            task_id=task_id,
+            context_id=context_id,
             **kwargs,
         ):
             if event.final:
@@ -148,6 +113,8 @@ class SimpleStreamHandler:
         self,  # pylint: disable=unused-argument
         params: MessageSendParams,
         *args: Any,
+        task_id: str | None = None,
+        context_id: str | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[Event, None]:
         """Handles the message_send method by the agent.
@@ -166,31 +133,10 @@ class SimpleStreamHandler:
                 events.
         """
 
-        task_id = params.message.task_id or uuid.uuid4().hex
-        context_id = params.message.context_id or "default-context"
+        task_id = task_id or params.message.task_id or uuid.uuid4().hex
+        context_id = context_id or params.message.context_id or "default-context"
         # ============ Agent Logic ============
-        from agentscope.tool import (
-            Toolkit,
-            view_text_file,
-            execute_python_code,
-            execute_shell_command,
-        )
-
-        toolkit = Toolkit()
-        toolkit.register_tool_function(execute_python_code)
-        toolkit.register_tool_function(execute_shell_command)
-        toolkit.register_tool_function(view_text_file)
-        # Get the skill path relative to this file
-        # From restaurant_finder/ to restaurant_finder/skills/
-        # A2UI_response_generator
-        skill_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__),
-                "skills",
-                "A2UI_response_generator",
-            ),
-        )
-        toolkit.register_agent_skill(skill_path)
+        toolkit = build_sample_toolkit()
 
         # Create the agent instance
         agent = ReActAgent(
@@ -206,8 +152,8 @@ class SimpleStreamHandler:
         )
         logger.info("Agent system prompt: %s", agent.sys_prompt)
 
-        session = JSONSession(save_dir="./sessions")
-        session_id = params.message.task_id or "test-a2ui-agent"
+        session = JSONSession(save_dir=self._session_dir)
+        session_id = task_id
         await session.load_session_state(
             session_id=session_id,
             agent=agent,
@@ -266,7 +212,7 @@ class SimpleStreamHandler:
             agent=agent,
         )
 
-        final_a2a_message = await self._prepare_final_message(
+        final_a2a_message = await prepare_final_a2a_message(
             formatter,
             final_msg,
         )

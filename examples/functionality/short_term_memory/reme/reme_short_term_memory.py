@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """ReMe-based short-term memory implementation for AgentScope."""
+import asyncio
 import json
 from pathlib import Path
 from typing import Any, List
@@ -11,7 +12,71 @@ from agentscope.formatter import DashScopeChatFormatter, OpenAIChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg, TextBlock, ToolUseBlock, ToolResultBlock
 from agentscope.model import DashScopeChatModel, OpenAIChatModel
-from agentscope.tool import write_text_file
+
+
+def _offload_write_text(path: str, content: str) -> None:
+    """Internal helper for ReMe offloading. Not a model-visible tool."""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def _stringify_content_blocks(content: list[Any]) -> str:
+    """Convert structured content blocks into a textual form for ReMe."""
+    return json.dumps(content, ensure_ascii=False, default=str)
+
+
+def _attach_existing_marks(
+    messages: list[Msg],
+    source_content: list[tuple[Msg, list[str]]],
+) -> list[tuple[Msg, list[str]]]:
+    """Preserve marks by message order after ReMe rewrites message objects."""
+    return [
+        (msg, list(source_content[index][1]) if index < len(source_content) else [])
+        for index, msg in enumerate(messages)
+    ]
+
+
+def _can_rewrite_storage(
+    source_messages: list[dict[str, Any]],
+    updated_messages: list[dict[str, Any]],
+) -> bool:
+    """Return whether ReMe output can be safely mapped back to stored marks."""
+    if len(source_messages) != len(updated_messages):
+        return False
+    return all(
+        source.get("role") == updated.get("role")
+        and source.get("content") == updated.get("content")
+        for source, updated in zip(source_messages, updated_messages)
+    )
+
+
+def _has_marks(source_content: list[tuple[Msg, list[str]]]) -> bool:
+    """Return whether any stored message has marks that need preserving."""
+    return any(marks for _, marks in source_content)
+
+
+def _can_persist_managed_storage(
+    mark: str | None,
+    exclude_mark: str | None,
+    has_prepended_summary: bool,
+) -> bool:
+    """Return whether ReMe output can replace the full backing storage."""
+    return mark is None and exclude_mark is None and not has_prepended_summary
+
+
+def _copy_message_identity(
+    updated_messages: list[Msg],
+    source_messages: list[Msg],
+) -> list[Msg]:
+    """Copy message identity fields from source messages by index."""
+    for index, msg in enumerate(updated_messages):
+        if index >= len(source_messages):
+            break
+        source_msg = source_messages[index]
+        msg.id = source_msg.id
+        msg.timestamp = source_msg.timestamp
+        msg.invocation_id = source_msg.invocation_id
+    return updated_messages
 
 
 class ReMeShortTermMemory(InMemoryMemory):
@@ -84,10 +149,10 @@ class ReMeShortTermMemory(InMemoryMemory):
             keep_recent_count: Number of most recent messages to
                 preserve without compression or compaction. These
                 messages remain in full in the active context.
-                Defaults to 1.
+                Defaults to 10.
             store_dir: Directory path for storing offloaded message
                 content and compressed history files. Defaults to
-                "working_memory".
+                "inmemory".
             **kwargs: Additional arguments passed to ReMeApp
                 initialization.
 
@@ -177,7 +242,13 @@ class ReMeShortTermMemory(InMemoryMemory):
             await self.app.__aexit__(exc_type, exc_val, exc_tb)
         self._app_started = False
 
-    async def get_memory(self) -> list[Msg]:
+    async def get_memory(
+        self,
+        mark: str | None = None,
+        exclude_mark: str | None = None,
+        prepend_summary: bool = True,
+        **kwargs: Any,
+    ) -> list[Msg]:
         """Retrieve and manage working memory with automatic summarization.
 
         This method performs the core working-memory management pipeline:
@@ -213,17 +284,20 @@ class ReMeShortTermMemory(InMemoryMemory):
             contains paths and content for all externally stored
             messages.
         """
+        source_content = list(self.content)
+        managed_msgs = await super().get_memory(
+            mark=mark,
+            exclude_mark=exclude_mark,
+            prepend_summary=prepend_summary,
+            **kwargs,
+        )
         messages: list[dict[str, Any]] = await self.formatter.format(
-            msgs=self.content,  # type: ignore[has-type]
+            msgs=managed_msgs,
         )
         for message in messages:
             if isinstance(message.get("content"), list):
                 msg_content = message.get("content")
-                logger.warning(
-                    "Skipping message with content as list. content=%s",
-                    msg_content,
-                )
-                message["content"] = ""
+                message["content"] = _stringify_content_blocks(msg_content)
 
         # Execute ReMe's working memory offload pipeline
         # This orchestrates compaction and/or compression based on
@@ -246,7 +320,7 @@ class ReMeShortTermMemory(InMemoryMemory):
         )
 
         # Extract managed messages and file write operations from result
-        messages = result.get("answer", [])
+        updated_message_dicts = result.get("answer", [])
         write_file_dict: dict = result.get("metadata", {}).get(
             "write_file_dict",
             {},
@@ -259,11 +333,36 @@ class ReMeShortTermMemory(InMemoryMemory):
                 file_dir = Path(path).parent
                 if not file_dir.exists():
                     file_dir.mkdir(parents=True, exist_ok=True)
-                await write_text_file(path, content_str)
+                await asyncio.to_thread(_offload_write_text, path, content_str)
 
         # Update internal content with managed messages
-        self.content = self.list_to_msg(messages)
-        return self.content
+        updated_messages = self.list_to_msg(updated_message_dicts)
+        can_rewrite = _can_rewrite_storage(messages, updated_message_dicts)
+        if can_rewrite:
+            updated_messages = _copy_message_identity(
+                updated_messages,
+                managed_msgs,
+            )
+
+        has_prepended_summary = bool(prepend_summary and self._compressed_summary)
+        if _can_persist_managed_storage(
+            mark,
+            exclude_mark,
+            has_prepended_summary,
+        ):
+            if can_rewrite:
+                self.content = _attach_existing_marks(
+                    updated_messages,
+                    source_content,
+                )
+            elif not _has_marks(source_content):
+                self.content = [(msg, []) for msg in updated_messages]
+
+        # Keep mark-sensitive reads on stable backing identities.
+        if mark is not None or exclude_mark is not None:
+            return managed_msgs
+
+        return updated_messages
 
     @staticmethod
     def list_to_msg(messages: list[dict[str, Any]]) -> list[Msg]:

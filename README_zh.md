@@ -172,6 +172,11 @@ pip install -e .
 # uv pip install -e .
 ```
 
+#### 受控文件系统主线
+
+对模型可见的文件访问，优先使用 `agentscope.filesystem` 与
+`FileDomainService`。
+
 ## 样例
 
 ### Hello AgentScope！

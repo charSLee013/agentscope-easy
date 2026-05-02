@@ -3,19 +3,16 @@
 streaming way."""
 import asyncio
 import os
+import tempfile
 
 from agentscope.agent import ReActAgent
+from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages
-from agentscope.tool import (
-    Toolkit,
-    execute_shell_command,
-    view_text_file,
-    execute_python_code,
-)
+from agentscope.tool import Toolkit, execute_shell_command, execute_python_code
 
 
 async def main() -> None:
@@ -23,7 +20,24 @@ async def main() -> None:
     toolkit = Toolkit()
     toolkit.register_tool_function(execute_shell_command)
     toolkit.register_tool_function(execute_python_code)
-    toolkit.register_tool_function(view_text_file)
+
+    # Setup filesystem service
+    fs = DiskFileSystem(
+        root_dir=tempfile.mkdtemp(prefix="agentscope-stream-fs-"),
+    )
+    handle = fs.create_handle(
+        [
+            {
+                "prefix": "/workspace/",
+                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+            },
+        ],
+    )
+    service = FileDomainService(handle)
+    toolkit.register_tool_function(
+        read_text_file,
+        preset_kwargs={"service": service},
+    )
 
     agent = ReActAgent(
         name="Friday",

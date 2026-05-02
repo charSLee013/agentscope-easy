@@ -39,7 +39,7 @@ About Agent
 About Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *How many tools are provided by AgentScope?*
-    AgentScope provides a set of built-in tools, including ``execute_python_code``, ``execute_shell_command``, ``write_text_file`` , etc. You can find them under ``agentscope.tool`` module.
+    AgentScope provides built-in tools including ``execute_python_code`` and ``execute_shell_command`` under the ``agentscope.tool`` module. File operations are provided through ``agentscope.filesystem`` with ``FileDomainService``.
 
 
 About Reporting Bugs

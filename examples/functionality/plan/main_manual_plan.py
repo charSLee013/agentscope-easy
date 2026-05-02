@@ -2,20 +2,22 @@
 """Manual specification plan example."""
 import asyncio
 import os
+import tempfile
 
 from agentscope.agent import ReActAgent, UserAgent
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+    write_file,
+    edit_file,
+    list_directory,
+)
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg
 from agentscope.model import DashScopeChatModel
 from agentscope.plan import PlanNotebook, SubTask
-from agentscope.tool import (
-    Toolkit,
-    execute_shell_command,
-    execute_python_code,
-    write_text_file,
-    insert_text_file,
-    view_text_file,
-)
+from agentscope.tool import Toolkit, execute_shell_command, execute_python_code
 
 plan_notebook = PlanNotebook()
 
@@ -63,13 +65,40 @@ async def main() -> None:
         ],
     )
 
+    # Setup filesystem service
+    fs = DiskFileSystem(
+        root_dir=tempfile.mkdtemp(prefix="agentscope-plan-fs-"),
+    )
+    handle = fs.create_handle(
+        [
+            {
+                "prefix": "/workspace/",
+                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+            },
+        ],
+    )
+    service = FileDomainService(handle)
+
     # Add basic tools
     toolkit = Toolkit()
     toolkit.register_tool_function(execute_shell_command)
     toolkit.register_tool_function(execute_python_code)
-    toolkit.register_tool_function(write_text_file)
-    toolkit.register_tool_function(insert_text_file)
-    toolkit.register_tool_function(view_text_file)
+    toolkit.register_tool_function(
+        read_text_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        write_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        edit_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        list_directory,
+        preset_kwargs={"service": service},
+    )
 
     # Create the agent
     agent = ReActAgent(

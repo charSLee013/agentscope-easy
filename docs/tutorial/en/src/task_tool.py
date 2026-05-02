@@ -19,13 +19,11 @@ All above features are implemented by the ``Toolkit`` class in AgentScope, which
 .. tip:: The support of MCP (Model Context Protocol) refers to the :ref:`mcp` section.
 """
 import asyncio
-import inspect
 import json
 from typing import Any, AsyncGenerator
 
 from pydantic import BaseModel, Field
 
-import agentscope
 from agentscope.message import TextBlock, ToolUseBlock
 from agentscope.tool import ToolResponse, Toolkit, execute_python_code
 
@@ -55,13 +53,28 @@ def tool_function(a: int, b: str) -> ToolResponse:
 # %%
 # .. tip:: Instance method and class method can also be used as tool functions, and the ``self`` and ``cls`` parameters will be ignored.
 #
-# AgentScope provides several built-in tool functions under the ``agentscope.tool`` module, such as ``execute_python_code``, ``execute_shell_command`` and text file write/read functions.
+# AgentScope provides built-in tool functions such as ``execute_python_code`` and
+# ``execute_shell_command`` under the ``agentscope.tool`` module.
+# For model-visible file access, use ``agentscope.filesystem`` with ``FileDomainService``.
 #
-
-print("Built-in Tool Functions:")
-for _ in agentscope.tool.__all__:
-    if _ not in ["Toolkit", "ToolResponse"]:
-        print(_)
+# Minimal filesystem wiring example:
+#
+# .. code-block:: python
+#
+#     from agentscope.filesystem import InMemoryFileSystem, FileDomainService
+#     from agentscope.tool import Toolkit
+#
+#     fs = InMemoryFileSystem()
+#     handle = fs.create_handle([
+#         {
+#             "prefix": "/workspace/",
+#             "ops": {"list", "file", "read_file", "write", "delete"},
+#         },
+#     ])
+#     service = FileDomainService(handle)
+#     toolkit = Toolkit()
+#     for tool in service.tool_functions():
+#         toolkit.register_tool_function(tool, preset_kwargs={"service": service})
 
 # %%
 # Toolkit
@@ -157,9 +170,9 @@ asyncio.run(example_tool_execution())
 #
 
 
-# Example tool function
-def tool_function(**kwargs: Any) -> ToolResponse:
-    """A tool function"""
+# Example tool function (kwargs variant)
+def tool_function_kwargs_example(**kwargs: Any) -> ToolResponse:
+    """A tool function accepting arbitrary keyword arguments."""
     return ToolResponse(
         content=[
             TextBlock(

@@ -175,6 +175,11 @@ pip install -e .
 # uv pip install -e .
 ```
 
+#### Controlled filesystem path
+
+For model-visible file access, use `agentscope.filesystem` with
+`FileDomainService`.
+
 
 ## Example
 

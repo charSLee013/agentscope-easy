@@ -28,9 +28,9 @@ agent_card = AgentCard(
             tags=["code_execution"],
         ),
         AgentSkill(
-            name="view_text_file",
-            id="view_text_file",
-            description="View the content of a text file on the server.",
+            name="read_text_file",
+            id="read_text_file",
+            description="Read text from a logical file in the workspace.",
             tags=["file_viewing"],
         ),
     ],
