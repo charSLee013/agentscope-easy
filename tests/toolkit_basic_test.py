@@ -831,6 +831,29 @@ class ToolkitBasicTest(IsolatedAsyncioTestCase):
             {},
         )
 
+    async def test_update_tool_groups_validation_is_atomic(self) -> None:
+        """Invalid update requests should not partially mutate group states."""
+        self.toolkit.create_tool_group(
+            "my_group",
+            "Browser use related tools.",
+            active=False,
+        )
+
+        self.toolkit.update_tool_groups(["my_group"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(ValueError):
+            self.toolkit.update_tool_groups(["my_group", "missing"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(ValueError):
+            self.toolkit.update_tool_groups(["basic"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(TypeError):
+            self.toolkit.update_tool_groups(["my_group"], "yes")
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
     async def test_postprocess_func(self) -> None:
         """Test postprocess function."""
         tool_use_block = ToolUseBlock(
