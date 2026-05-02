@@ -88,8 +88,8 @@ print(agent_skill_prompt)
 custom_toolkit = Toolkit(
     # 向智能体/大语言模型介绍如何使用技能的指令
     agent_skill_instruction="<system-info>为你提供了一组技能，每个技能都在一个目录中，并由 SKILL.md 文件进行描述。</system-info>",
-    # 用于格式化每个技能提示词的模板，必须包含 {name}、{description} 和 {dir} 字段
-    agent_skill_template="- {name}(in directory '{dir}'): {description}",
+    # 用于格式化每个技能提示词的模板，必须包含 {name}、{description} 和 {logical_dir} 字段
+    agent_skill_template="- {name}(in directory '{logical_dir}'): {description}",
 )
 
 custom_toolkit.register_agent_skill("sample_skill")
