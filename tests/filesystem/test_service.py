@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from agentscope.filesystem import AccessDeniedError, InMemoryFileSystem
-from agentscope.filesystem._service import FileDomainService
+from agentscope.filesystem import (
+    AccessDeniedError,
+    FileDomainService,
+    InMemoryFileSystem,
+)
 
 
 ALL_OPS = {
@@ -78,3 +81,21 @@ def test_service_permissions_markdown_comes_from_handle() -> None:
     summary = svc.describe_permissions_markdown()
     assert "/internal/: ls, stat, read, write, delete" in summary
     assert "/workspace/: ls, stat, read, write, delete" in summary
+
+
+def test_service_read_re_accepts_absolute_path() -> None:
+    """service.read_re() must require absolute logical paths."""
+    from agentscope.filesystem import InvalidPathError
+
+    svc = _build_service()
+    # Happy path: absolute path works
+    svc.write_file(
+        "/workspace/logs/app.log",
+        "ERROR: fail\nINFO: ok\nWARN: retry",
+    )
+    matches = svc.read_re("/workspace/logs/app.log", "ERROR.*")
+    assert "ERROR: fail" in matches
+
+    # Relative path raises InvalidPathError
+    with pytest.raises(InvalidPathError):
+        svc.read_re("logs/app.log", "ERROR.*")

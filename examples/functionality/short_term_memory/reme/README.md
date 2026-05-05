@@ -198,12 +198,15 @@ The example demonstrates a complete workflow from tool registration to agent int
 ```python
 import asyncio
 import os
+import tempfile
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+async def main() -> None:
+    load_dotenv()
 ```
 
-The code starts by loading environment variables (including the DashScope API key) from a `.env` file.
+The runtime entrypoint loads environment variables (including the DashScope API key) from a `.env` file, while importing the module stays side-effect free.
 
 #### 2. Tool Registration
 
@@ -212,44 +215,74 @@ The example defines two custom tools that demonstrate how to integrate retrieval
 **`grep` Tool**: Searches for patterns in files using regular expressions
 ```python
 async def grep(file_path: str, pattern: str, limit: str) -> ToolResponse:
-    """A powerful search tool for finding patterns in files..."""
-    from reme_ai.retrieve.working import GrepOp
+    """Search for regex patterns in files.
 
-    op = GrepOp()
-    await op.async_call(file_path=file_path, pattern=pattern, limit=limit)
-    return ToolResponse(
-        content=[TextBlock(type="text", text=op.output)],
-    )
+    Args:
+        file_path: Absolute logical path (must be under /workspace/ in this example).
+        pattern: Regex pattern to match.
+        limit: Maximum number of regex match fragments to return.
+    """
+    matches = service.read_re(file_path, pattern)
+    output = "\n".join(matches[: int(limit)])
+    return ToolResponse(content=[TextBlock(type="text", text=output)])
 ```
 
 **`read_file` Tool**: Reads specific line ranges from files
 ```python
 async def read_file(file_path: str, offset: int, limit: int) -> ToolResponse:
-    """Reads and returns the content of a specified file..."""
-    from reme_ai.retrieve.working import ReadFileOp
+    """Reads and returns the content of a specified file.
 
-    op = ReadFileOp()
-    await op.async_call(file_path=file_path, offset=offset, limit=limit)
-    return ToolResponse(
-        content=[TextBlock(type="text", text=op.output)],
+    Args:
+        file_path: Absolute logical path (must start with /, e.g. /workspace/filename).
+        offset: Starting line number (0-indexed).
+        limit: Maximum number of lines to read.
+    """
+    raw = service.read_text_file(
+        file_path,
+        start_line=offset + 1,
+        read_lines=limit,
     )
+    lines = raw.splitlines()
+    numbered = [f"line{offset + i + 1}: {line}" for i, line in enumerate(lines)]
+    return ToolResponse(content=[TextBlock(type="text", text="\n".join(numbered))])
 ```
 
 > **Important Note on Tool Replaceability**:
-> - The `grep` and `read_file` tools shown here are **example implementations** using ReMe's built-in operations
+> - The `grep` and `read_file` tools shown here are **example implementations** backed by `FileDomainService`
 > - You can **replace them with your own retrieval tools**, such as:
 >   - Vector database embedding retrieval (e.g., ChromaDB, Pinecone, Weaviate)
 >   - Web search APIs (e.g., Google Search, Bing Search)
 >   - Database query tools (e.g., SQL queries, MongoDB queries)
 >   - Custom domain-specific search solutions
-> - Similarly, the **offline write operations** (used internally by ReMeShortTermMemory to store compacted content) can be customized by modifying the `write_text_file` function in AgentScope's tool system
+> - The **offline write operations** used internally by ReMeShortTermMemory to store compacted content use an internal helper function, not a model-visible tool
 > - The key requirement is that your tools return `ToolResponse` objects with appropriate content blocks
+
+The sample keeps agent-visible files and ReMe offload files under the same demo
+root so `/workspace/...` reads and internal compaction artifacts share one host
+directory tree:
+
+```python
+_DEMO_ROOT: Path | None = None
+
+def _demo_root() -> Path:
+    global _DEMO_ROOT
+    if _DEMO_ROOT is None:
+        _DEMO_ROOT = Path(tempfile.mkdtemp(prefix="agentscope-reme-fs-"))
+    return _DEMO_ROOT
+
+def _workspace_dir() -> Path:
+    return _demo_root() / "workspace"
+
+def _reme_store_dir() -> Path:
+    return _workspace_dir() / "reme"
+```
 
 #### 3. LLM Model Initialization
 
 ```python
 llm = DashScopeChatModel(
-    model_name="qwen3-coder-30b-a3b-instruct",
+    model_name="qwen3-max",
+    # model_name="qwen3-coder-30b-a3b-instruct",
     api_key=os.environ.get("DASHSCOPE_API_KEY"),
     stream=False,
     generate_kwargs={
@@ -272,7 +305,7 @@ short_term_memory = ReMeShortTermMemory(
     max_tool_message_tokens=2000,          # Maximum tolerable tool response length
     group_token_threshold=None,            # Max tokens per LLM compression batch; None means no splitting
     keep_recent_count=1,                   # Keep 1 recent message intact (set to 1 for demo; use 10 in production)
-    store_dir="inmemory",            # Storage directory for offloaded content
+    store_dir=str(_reme_store_dir()),      # Storage directory under the demo workspace
 )
 ```
 
@@ -295,15 +328,14 @@ The `async with` statement ensures proper initialization and cleanup of memory r
 The example demonstrates memory compaction by adding a large tool response:
 
 ```python
-# Read README content and multiply it 10 times to simulate a large response
-f = open("../../../../README.md", encoding="utf-8")
-readme_content = f.read()
-f.close()
+# Seed the repository README into /workspace/README.md, then multiply it
+# 10 times to simulate a large response that stays in the same demo root.
+readme_content = _seed_workspace_readme(service)
 
 memories = [
     {
         "role": "user",
-        "content": "搜索下项目资料",
+        "content": "Search for project information",
     },
     {
         "role": "assistant",
@@ -336,8 +368,10 @@ agent = ReActAgent(
     name="react",
     sys_prompt=(
         "You are a helpful assistant. "
-        "工具调用的调用可能会被缓存到本地。"
-        "可以先使用`Grep`匹配关键词或者正则表达式所在行数，然后通过`ReadFile`读取位置附近的代码。"
+        "Tool calls may be cached locally. "
+        "You can first use `Grep` to match keywords or regular "
+        "expressions to find line numbers, then use `ReadFile` "
+        "to read the code near that location. "
         # ... more instructions
     ),
     model=llm,
@@ -359,7 +393,10 @@ The agent is configured with:
 ```python
 msg = Msg(
     role="user",
-    content=("项目资料中，agentscope_v1论文的一作是谁？"),
+    content=(
+        "In the project documentation, who is the first author "
+        "of the agentscope_v1 paper?"
+    ),
     name="user",
 )
 msg = await agent(msg)
@@ -476,4 +513,3 @@ The example shows a typical workflow:
 3. Agent uses `read_file` tool to read specific sections
 4. Large tool responses are automatically compacted by the memory system
 5. Agent answers the user's question based on the retrieved information
-

@@ -3,6 +3,7 @@
 ## 1. 功能定义
 
 - `agentscope.filesystem` 提供受控的逻辑文件系统 MVP，服务于 Host/Toolkit 下的文件读写能力。
+- 对于模型可见文件访问，`agentscope.filesystem` 是正式主线。
 - 本期只交付：
   - 路径校验与授权模型
   - `InMemoryFileSystem` / `DiskFileSystem`

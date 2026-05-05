@@ -98,8 +98,8 @@ toolkit = Toolkit(
     # The instruction that introduces how to use the skill to the agent/llm
     agent_skill_instruction="<system-info>You're provided a collection of skills, each in a directory and described by a SKILL.md file.</system-info>\n",
     # The template for formatting each skill's prompt, must contain
-    # {name}, {description}, and {dir} fields
-    agent_skill_template="- {name}({dir}): {description}",
+    # {name}, {description}, and {logical_dir} fields
+    agent_skill_template="- {name}({logical_dir}): {description}",
 )
 
 toolkit.register_agent_skill("sample_skill")

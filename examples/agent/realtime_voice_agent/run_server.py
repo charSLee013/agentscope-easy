@@ -2,6 +2,7 @@
 """A test server"""
 import asyncio
 import os
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -11,6 +12,11 @@ from fastapi.responses import FileResponse
 
 from agentscope import logger
 from agentscope.agent import RealtimeAgent
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.realtime import (
     DashScopeRealtimeModel,
     GeminiRealtimeModel,
@@ -19,12 +25,7 @@ from agentscope.realtime import (
     ServerEvents,
     ClientEventType,
 )
-from agentscope.tool import (
-    Toolkit,
-    execute_python_code,
-    execute_shell_command,
-    view_text_file,
-)
+from agentscope.tool import Toolkit, execute_python_code, execute_shell_command
 
 app = FastAPI()
 
@@ -118,7 +119,32 @@ async def single_agent_endpoint(
                     toolkit = Toolkit()
                     toolkit.register_tool_function(execute_python_code)
                     toolkit.register_tool_function(execute_shell_command)
-                    toolkit.register_tool_function(view_text_file)
+                    # Setup filesystem service
+                    fs = DiskFileSystem(
+                        root_dir=tempfile.mkdtemp(
+                            prefix="agentscope-realtime-fs-",
+                        ),
+                    )
+                    handle = fs.create_handle(
+                        [
+                            {
+                                "prefix": "/workspace/",
+                                "ops": {
+                                    "list",
+                                    "file",
+                                    "read_binary",
+                                    "read_file",
+                                    "write",
+                                    "delete",
+                                },
+                            },
+                        ],
+                    )
+                    service = FileDomainService(handle)
+                    toolkit.register_tool_function(
+                        read_text_file,
+                        preset_kwargs={"service": service},
+                    )
 
                 # Create the appropriate model based on provider
                 if model_provider == "dashscope":

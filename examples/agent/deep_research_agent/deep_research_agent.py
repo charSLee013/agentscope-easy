@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Deep Research Agent"""
 # pylint: disable=too-many-lines, no-name-in-module
-import os
 import json
+import os
 
 from typing import Type, Optional, Any, Tuple
 from datetime import datetime
@@ -23,17 +23,22 @@ from utils import (
     get_structure_output,
 )
 
-from agentscope import logger, setup_logger
+from agentscope import logger
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    validate_path,
+    read_text_file,
+    write_file,
+    edit_file,
+    list_directory,
+)
 from agentscope.mcp import StatefulClientBase
 from agentscope.agent import ReActAgent
 from agentscope.model import ChatModelBase
 from agentscope.formatter import FormatterBase
 from agentscope.memory import MemoryBase
-from agentscope.tool import (
-    ToolResponse,
-    view_text_file,
-    write_text_file,
-)
+from agentscope.tool import ToolResponse
 from agentscope.message import (
     Msg,
     ToolUseBlock,
@@ -44,13 +49,39 @@ from agentscope.message import (
 
 _DEEP_RESEARCH_AGENT_DEFAULT_SYS_PROMPT = "You're a helpful assistant."
 
-_LOG_DIR = os.path.join(os.path.dirname(__file__), "log")
-_LOG_PATH = os.path.join(
-    _LOG_DIR,
-    f"log_{datetime.now().strftime('%y%m%d%H%M%S')}.md",
-)
-os.makedirs(_LOG_DIR, exist_ok=True)
-setup_logger(level="INFO", filepath=_LOG_PATH)
+
+def _append_expected_output(
+    current_msg: Msg,
+    expected_output: str | None,
+) -> None:
+    """Append expected-output text without corrupting structured content."""
+    if isinstance(current_msg.content, str):
+        current_msg.content += f"\nExpected Output:\n{expected_output}"
+        return
+    if isinstance(current_msg.content, list):
+        current_msg.content = [
+            *current_msg.content,
+            TextBlock(
+                type="text",
+                text=f"Expected Output:\n{expected_output}",
+            ),
+        ]
+        return
+    raise TypeError(
+        "DeepResearchAgent expects user message content to be str or list.",
+    )
+
+
+def _build_inprocess_report_path(
+    report_path_based: str,
+    report_index: int,
+) -> str:
+    """Build a stable logical path for an intermediate report."""
+    logical_path = (
+        f"/workspace/{report_path_based}_inprocess_report_{report_index}.md"
+    )
+    validate_path(logical_path)
+    return logical_path
 
 
 class SubTaskItem(BaseModel):
@@ -162,16 +193,52 @@ class DeepResearchAgent(ReActAgent):
         self.tmp_file_storage_dir = tmp_file_storage_dir
         self.current_subtask = []
 
-        # register all necessary tools for deep research agent
-        self.toolkit.register_tool_function(view_text_file)
-        self.toolkit.register_tool_function(write_text_file)
+        # Setup filesystem service and register tools
+        workspace_dir = os.path.join(self.tmp_file_storage_dir, "workspace")
+        fs = DiskFileSystem(
+            root_dir=self.tmp_file_storage_dir,
+            workspace_dir=workspace_dir,
+        )
+        handle = fs.create_handle(
+            [
+                {
+                    "prefix": "/workspace/",
+                    "ops": {
+                        "list",
+                        "file",
+                        "read_binary",
+                        "read_file",
+                        "write",
+                        "delete",
+                    },
+                },
+            ],
+        )
+        self.filesystem_service = FileDomainService(handle)
+        self.toolkit.register_tool_function(
+            read_text_file,
+            preset_kwargs={"service": self.filesystem_service},
+        )
+        self.toolkit.register_tool_function(
+            write_file,
+            preset_kwargs={"service": self.filesystem_service},
+        )
+        self.toolkit.register_tool_function(
+            edit_file,
+            preset_kwargs={"service": self.filesystem_service},
+        )
+        self.toolkit.register_tool_function(
+            list_directory,
+            preset_kwargs={"service": self.filesystem_service},
+        )
+
         self._search_mcp_client = search_mcp_client
         self._mcp_initialized = False
 
         self.search_function = "tavily-search"
         self.extract_function = "tavily-extract"
-        self.read_file_function = "view_text_file"
-        self.write_file_function = "write_text_file"
+        self.read_file_function = "read_text_file"
+        self.write_file_function = "write_file"
         self.summarize_function = "summarize_intermediate_results"
 
         self.intermediate_memory = []
@@ -221,8 +288,9 @@ class DeepResearchAgent(ReActAgent):
 
         # Identify the expected output and generate a plan
         await self.decompose_and_expand_subtask()
-        current_msg.content += (
-            f"\nExpected Output:\n{self.current_subtask[0].knowledge_gaps}"
+        _append_expected_output(
+            current_msg,
+            self.current_subtask[0].knowledge_gaps,
         )
 
         # Add user query message to memory
@@ -544,25 +612,19 @@ class DeepResearchAgent(ReActAgent):
                 },
             )
 
-            try:
-                gaps_and_plan = await self.get_model_output(
-                    msgs=[
-                        Msg("system", decompose_sys_prompt, "system"),
-                        Msg("user", previous_plan_inst, "user"),
-                    ],
-                    format_template=SubtasksDecomposition,
-                    stream=self.model.stream,
-                )
-                response = json.dumps(
-                    gaps_and_plan,
-                    indent=2,
-                    ensure_ascii=False,
-                )
-            except Exception:  # noqa: F841
-                gaps_and_plan = {}
-                response = self.prompt_dict["retry_hint"].format_map(
-                    {"state": "decomposing the subtask"},
-                )
+            gaps_and_plan = await self.get_model_output(
+                msgs=[
+                    Msg("system", decompose_sys_prompt, "system"),
+                    Msg("user", previous_plan_inst, "user"),
+                ],
+                format_template=SubtasksDecomposition,
+                stream=self.model.stream,
+            )
+            response = json.dumps(
+                gaps_and_plan,
+                indent=2,
+                ensure_ascii=False,
+            )
             self.current_subtask[-1].knowledge_gaps = gaps_and_plan.get(
                 "knowledge_gaps",
                 None,
@@ -619,8 +681,11 @@ class DeepResearchAgent(ReActAgent):
                     format_template=WebExtraction,
                     stream=self.model.stream,
                 )
-            except Exception:  # noqa: F841
-                follow_up_subtask = {}
+            except Exception:
+                logger.exception(
+                    "Failed to expand follow-up research request.",
+                )
+                raise
 
             #  Step #2: extract the url
             if follow_up_subtask.get("need_more_information", False):
@@ -676,9 +741,19 @@ class DeepResearchAgent(ReActAgent):
                         format_template=FollowupJudge,
                         stream=self.model.stream,
                     )
-                except Exception:  # noqa: F841
-                    follow_up_response = {}
-                if not follow_up_response.get("is_sufficient", True):
+                except Exception:
+                    logger.exception(
+                        "Failed to judge follow-up research sufficiency.",
+                    )
+                    raise
+                is_sufficient = follow_up_response.get("is_sufficient")
+                if not isinstance(is_sufficient, bool):
+                    raise ValueError(
+                        "Follow-up judge output missing boolean "
+                        "is_sufficient.",
+                    )
+
+                if not is_sufficient:
                     subtasks = follow_up_subtask.get("subtask", None)
                     logger.info("Figuring out %s", subtasks)
                     intermediate_report = (
@@ -812,15 +887,14 @@ class DeepResearchAgent(ReActAgent):
         )
         intermediate_report = blocks[0]["text"]  # type: ignore[index]
 
-        # Write the intermediate report
-        intermediate_report_path = os.path.join(
-            self.tmp_file_storage_dir,
-            f"{self.report_path_based}_"
-            f"{self.user_query}_inprocess_report_{self.report_index}.md",
+        # Write the intermediate report using a stable logical path.
+        logical_path = _build_inprocess_report_path(
+            self.report_path_based,
+            self.report_index,
         )
         self.report_index += 1
         params = {
-            "file_path": intermediate_report_path,
+            "path": logical_path,
             "content": intermediate_report,
         }
         await self.call_specific_tool(
@@ -828,8 +902,8 @@ class DeepResearchAgent(ReActAgent):
             params=params,
         )
         logger.info(
-            "Storing the intermediate findings: %s",
-            intermediate_report,
+            "Stored intermediate findings at %s",
+            logical_path,
         )
         if (
             self.intermediate_memory[-1].has_content_blocks("tool_use")
@@ -845,7 +919,7 @@ class DeepResearchAgent(ReActAgent):
                         text=self.prompt_dict["update_report_hint"].format_map(
                             {
                                 "intermediate_report": intermediate_report,
-                                "report_path": intermediate_report_path,
+                                "report_path": logical_path,
                             },
                         ),
                     ),
@@ -875,8 +949,9 @@ class DeepResearchAgent(ReActAgent):
             checklist (`str`):
                 The expected output items of the original task.
         """
-        reporting_sys_prompt = self.prompt_dict["reporting_sys_prompt"]
-        reporting_sys_prompt.format_map(
+        reporting_sys_prompt = self.prompt_dict[
+            "reporting_sys_prompt"
+        ].format_map(
             {
                 "original_task": self.user_query,
                 "checklist": checklist,
@@ -886,22 +961,26 @@ class DeepResearchAgent(ReActAgent):
         # Collect all intermediate reports
         if self.report_index > 1:
             inprocess_report = ""
-            for index in range(self.report_index):
+            for index in range(1, self.report_index):
                 params = {
-                    "file_path": os.path.join(
-                        self.tmp_file_storage_dir,
-                        f"{self.report_path_based}_"
-                        f"{self.user_query}_inprocess_report_{index + 1}.md",
+                    "path": _build_inprocess_report_path(
+                        self.report_path_based,
+                        index,
                     ),
                 }
                 _, read_draft_tool_res_msg = await self.call_specific_tool(
                     func_name=self.read_file_function,
                     params=params,
                 )
-                inprocess_report += (
-                    read_draft_tool_res_msg.content[0]["output"][0]["text"]
-                    + "\n"
-                )
+                read_draft_text = read_draft_tool_res_msg.content[0]["output"][
+                    0
+                ]["text"]
+                if read_draft_text.startswith("Error:"):
+                    raise RuntimeError(
+                        "Failed to read draft report at "
+                        f"{params['path']}: {read_draft_text}",
+                    )
+                inprocess_report += read_draft_text + "\n"
 
             msgs = [
                 Msg(
@@ -929,19 +1008,15 @@ class DeepResearchAgent(ReActAgent):
             stream=self.model.stream,
         )
         final_report_content = blocks[0]["text"]  # type: ignore[index]
-        logger.info(
-            "The final Report is generated: %s",
-            final_report_content,
-        )
+        logger.info("Final report generated.")
 
         # Write the final report into a file
-        detailed_report_path = os.path.join(
-            self.tmp_file_storage_dir,
-            f"{self.report_path_based}_detailed_report.md",
+        logical_path = (
+            f"/workspace/{self.report_path_based}_detailed_report.md"
         )
 
         params = {
-            "file_path": detailed_report_path,
+            "path": logical_path,
             "content": final_report_content,
         }
         _, write_report_tool_res_msg = await self.call_specific_tool(
@@ -949,7 +1024,7 @@ class DeepResearchAgent(ReActAgent):
             params=params,
         )
 
-        return write_report_tool_res_msg, detailed_report_path
+        return write_report_tool_res_msg, logical_path
 
     async def _summarizing(self) -> Msg:
         """Generate a report based on the exsisting findings when the
@@ -970,7 +1045,7 @@ class DeepResearchAgent(ReActAgent):
                 ensure_ascii=False,
             ),
         )
-        self.memory.add(summarize_result)
+        await self.memory.add(summarize_result)
         return summarize_result
 
     async def reflect_failure(self) -> ToolResponse:
@@ -998,25 +1073,19 @@ class DeepResearchAgent(ReActAgent):
                 "plan": self.current_subtask[-1].working_plan,
             },
         )
-        try:
-            reflection = await self.get_model_output(
-                msgs=[
-                    Msg("system", reflect_sys_prompt, "system"),
-                    Msg("user", reflect_inst, "user"),
-                ],
-                format_template=ReflectFailure,
-                stream=self.model.stream,
-            )
-            response = json.dumps(
-                reflection,
-                indent=2,
-                ensure_ascii=False,
-            )
-        except Exception:  # noqa: F841
-            reflection = {}
-            response = self.prompt_dict["retry_hint"].format_map(
-                {"state": "making the reflection"},
-            )
+        reflection = await self.get_model_output(
+            msgs=[
+                Msg("system", reflect_sys_prompt, "system"),
+                Msg("user", reflect_inst, "user"),
+            ],
+            format_template=ReflectFailure,
+            stream=self.model.stream,
+        )
+        response = json.dumps(
+            reflection,
+            indent=2,
+            ensure_ascii=False,
+        )
 
         if reflection.get("rephrase_subtask", False) and reflection[
             "rephrase_subtask"

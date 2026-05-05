@@ -241,7 +241,7 @@ reuse this function to check the notes of the tool groups.""",
         async for chunk in res:
             self.assertEqual(
                 chunk.content[0]["text"],
-                "All tool groups are now deactivated currently.",
+                "All non-basic tool groups are now deactivated currently.",
             )
 
         # Test if no tool function is available now
@@ -270,6 +270,85 @@ reuse this function to check the notes of the tool groups.""",
                 "Activate the tool group by calling 'reset_equipped_tools' "
                 "first to use this tool.",
             )
+
+    async def test_reset_equipped_tools_invalid_bool_keeps_state(self) -> None:
+        """Invalid bool arguments should not mutate active group state."""
+        self.toolkit.register_tool_function(
+            self.toolkit.reset_equipped_tools,
+        )
+        self.toolkit.create_tool_group("browser_use", "Browser tools")
+        self.toolkit.register_tool_function(
+            tool_function_1,
+            group_name="browser_use",
+        )
+        self.toolkit.update_tool_groups(["browser_use"], True)
+
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="127",
+                name="reset_equipped_tools",
+                input={"browser_use": "yes"},
+            ),
+        )
+
+        async for chunk in res:
+            self.assertIn("should be a bool value", chunk.content[0]["text"])
+
+        self.assertTrue(self.toolkit.groups["browser_use"].active)
+
+    async def test_reset_equipped_tools_unknown_group_keeps_state(
+        self,
+    ) -> None:
+        """Unknown groups should not mutate active group state."""
+        self.toolkit.register_tool_function(
+            self.toolkit.reset_equipped_tools,
+        )
+        self.toolkit.create_tool_group("browser_use", "Browser tools")
+        self.toolkit.register_tool_function(
+            tool_function_1,
+            group_name="browser_use",
+        )
+        self.toolkit.update_tool_groups(["browser_use"], True)
+
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="128",
+                name="reset_equipped_tools",
+                input={"unknown_group": True},
+            ),
+        )
+
+        async for chunk in res:
+            self.assertIn("unknown tool group", chunk.content[0]["text"])
+
+        self.assertTrue(self.toolkit.groups["browser_use"].active)
+
+    async def test_reset_equipped_tools_rejects_basic_group(self) -> None:
+        """The basic group should be rejected in meta-tool input."""
+        self.toolkit.register_tool_function(
+            self.toolkit.reset_equipped_tools,
+        )
+        self.toolkit.create_tool_group("browser_use", "Browser tools")
+        self.toolkit.update_tool_groups(["browser_use"], True)
+
+        res = await self.toolkit.call_tool_function(
+            ToolUseBlock(
+                type="tool_use",
+                id="129",
+                name="reset_equipped_tools",
+                input={"basic": True},
+            ),
+        )
+
+        async for chunk in res:
+            self.assertIn(
+                "cannot update the default 'basic'",
+                chunk.content[0]["text"],
+            )
+
+        self.assertTrue(self.toolkit.groups["browser_use"].active)
 
     async def asyncTearDown(self) -> None:
         """Clean up after each test."""

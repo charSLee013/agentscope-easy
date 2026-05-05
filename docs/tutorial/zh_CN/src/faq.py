@@ -39,7 +39,7 @@
 关于工具
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 *AgentScope 提供了多少工具？*
-    AgentScope 提供了一套内置工具，包括 ``execute_python_code``、``execute_shell_command``、``write_text_file`` 等。您可以在 ``agentscope.tool`` 模块下找到它们。
+    AgentScope 提供了一套内置工具，包括 ``execute_python_code``、``execute_shell_command`` 等。对于文件操作，请使用 ``agentscope.filesystem`` 与 ``FileDomainService``。
 
 
 关于错误报告

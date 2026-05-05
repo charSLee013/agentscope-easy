@@ -3,24 +3,27 @@
 import asyncio
 import json
 import os
+import tempfile
 from collections import OrderedDict
 from typing import AsyncGenerator
 
 from pydantic import BaseModel, Field
 
 from agentscope.agent import ReActAgent
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+    write_file,
+    edit_file,
+    list_directory,
+)
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.mcp import HttpStatelessClient, StdIOStatefulClient
 from agentscope.message import Msg, TextBlock
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages
-from agentscope.tool import (
-    ToolResponse,
-    Toolkit,
-    write_text_file,
-    insert_text_file,
-    view_text_file,
-)
+from agentscope.tool import ToolResponse, Toolkit
 
 
 class ResultModel(BaseModel):
@@ -135,10 +138,42 @@ async def create_worker(
             "MCP client registration.",
         )
 
-    # Basic read/write tools
-    toolkit.register_tool_function(write_text_file)
-    toolkit.register_tool_function(insert_text_file)
-    toolkit.register_tool_function(view_text_file)
+    # Basic read/write tools via FileDomainService
+    fs = DiskFileSystem(
+        root_dir=tempfile.mkdtemp(prefix="agentscope-planner-fs-"),
+    )
+    handle = fs.create_handle(
+        [
+            {
+                "prefix": "/workspace/",
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "write",
+                    "delete",
+                },
+            },
+        ],
+    )
+    service = FileDomainService(handle)
+    toolkit.register_tool_function(
+        read_text_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        write_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        edit_file,
+        preset_kwargs={"service": service},
+    )
+    toolkit.register_tool_function(
+        list_directory,
+        preset_kwargs={"service": service},
+    )
 
     # Create a new sub-agent to finish the given task
     sub_agent = ReActAgent(

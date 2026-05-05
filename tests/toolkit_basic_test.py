@@ -147,7 +147,9 @@ class ExtendedModelReusingBaseModel(BaseModel):
     extra_field: str = Field(description="Extra field")
 
 
-class ToolkitBasicTest(IsolatedAsyncioTestCase):
+class ToolkitBasicTest(  # pylint: disable=too-many-public-methods
+    IsolatedAsyncioTestCase,
+):
     """Basic unittests for the toolkit module."""
 
     async def asyncSetUp(self) -> None:
@@ -830,6 +832,29 @@ class ToolkitBasicTest(IsolatedAsyncioTestCase):
             self.toolkit.tools,
             {},
         )
+
+    async def test_update_tool_groups_validation_is_atomic(self) -> None:
+        """Invalid update requests should not partially mutate group states."""
+        self.toolkit.create_tool_group(
+            "my_group",
+            "Browser use related tools.",
+            active=False,
+        )
+
+        self.toolkit.update_tool_groups(["my_group"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(ValueError):
+            self.toolkit.update_tool_groups(["my_group", "missing"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(ValueError):
+            self.toolkit.update_tool_groups(["basic"], True)
+        self.assertTrue(self.toolkit.groups["my_group"].active)
+
+        with self.assertRaises(TypeError):
+            self.toolkit.update_tool_groups(["my_group"], "yes")
+        self.assertTrue(self.toolkit.groups["my_group"].active)
 
     async def test_postprocess_func(self) -> None:
         """Test postprocess function."""

@@ -2,10 +2,12 @@
 """The main entry point of the Deep Research agent example."""
 import asyncio
 import os
+import tempfile
+from datetime import datetime
 
 from deep_research_agent import DeepResearchAgent
 
-from agentscope import logger
+from agentscope import logger, setup_logger
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.model import DashScopeChatModel
@@ -15,8 +17,6 @@ from agentscope.mcp import StdIOStatefulClient
 
 async def main(user_query: str) -> None:
     """The main entry point for the Deep Research agent example."""
-    logger.setLevel("DEBUG")
-
     tavily_search_client = StdIOStatefulClient(
         name="tavily_mcp",
         command="npx",
@@ -24,15 +24,24 @@ async def main(user_query: str) -> None:
         env={"TAVILY_API_KEY": os.getenv("TAVILY_API_KEY", "")},
     )
 
-    default_working_dir = os.path.join(
-        os.path.dirname(__file__),
-        "deepresearch_agent_demo_env",
-    )
     agent_working_dir = os.getenv(
         "AGENT_OPERATION_DIR",
-        default_working_dir,
+        None,
     )
+    if agent_working_dir is None:
+        agent_working_dir = tempfile.mkdtemp(
+            prefix="agentscope-deepresearch-",
+        )
     os.makedirs(agent_working_dir, exist_ok=True)
+    log_dir = os.path.join(agent_working_dir, "log")
+    os.makedirs(log_dir, exist_ok=True)
+    setup_logger(
+        level="INFO",
+        filepath=os.path.join(
+            log_dir,
+            f"log_{datetime.now().strftime('%y%m%d%H%M%S')}.md",
+        ),
+    )
 
     try:
         await tavily_search_client.connect()
@@ -57,13 +66,17 @@ async def main(user_query: str) -> None:
             content=user_query,
             role="user",
         )
-        result = await agent(msg)
-        logger.info(result)
+        await agent(msg)
+        logger.info("Deep research completed.")
 
     except Exception as err:
         logger.exception(err)
+        raise
     finally:
-        await tavily_search_client.close()
+        try:
+            await tavily_search_client.close()
+        finally:
+            setup_logger("INFO")
 
 
 if __name__ == "__main__":
@@ -77,7 +90,4 @@ if __name__ == "__main__":
         "your result to the nearest 1000 hours and do not use "
         "any comma separators if necessary."
     )
-    try:
-        asyncio.run(main(query))
-    except Exception as e:
-        logger.exception(e)
+    asyncio.run(main(query))

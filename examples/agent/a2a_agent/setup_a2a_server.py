@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Set up an A2A server with a ReAct agent to handle the input query"""
 import os
+import tempfile
 import uuid
 from typing import AsyncGenerator, Any
 
@@ -16,16 +17,48 @@ from a2a.types import (
 from a2a.server.apps import A2AStarletteApplication
 
 from agentscope.agent import ReActAgent
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.formatter import DashScopeChatFormatter, A2AChatFormatter
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages
 from agentscope.session import JSONSession
-from agentscope.tool import (
-    Toolkit,
-    execute_python_code,
-    execute_shell_command,
-    view_text_file,
-)
+from agentscope.tool import Toolkit, execute_python_code, execute_shell_command
+
+
+def build_a2a_toolkit() -> Toolkit:
+    """Build the real toolkit used by the A2A sample server."""
+    toolkit = Toolkit()
+    toolkit.register_tool_function(execute_python_code)
+    toolkit.register_tool_function(execute_shell_command)
+
+    fs = DiskFileSystem(
+        root_dir=tempfile.mkdtemp(prefix="agentscope-a2a-fs-"),
+    )
+    handle = fs.create_handle(
+        [
+            {
+                "prefix": "/workspace/",
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "write",
+                    "delete",
+                },
+            },
+        ],
+    )
+    service = FileDomainService(handle)
+    toolkit.register_tool_function(
+        read_text_file,
+        preset_kwargs={"service": service},
+    )
+    return toolkit
 
 
 class SimpleStreamHandler:
@@ -52,12 +85,7 @@ class SimpleStreamHandler:
         task_id = params.message.task_id or uuid.uuid4().hex
         context_id = params.message.context_id or "default-context"
         # ============ Agent Logic ============
-
-        # Register the tool functions
-        toolkit = Toolkit()
-        toolkit.register_tool_function(execute_python_code)
-        toolkit.register_tool_function(execute_shell_command)
-        toolkit.register_tool_function(view_text_file)
+        toolkit = build_a2a_toolkit()
 
         # Create the agent instance
         agent = ReActAgent(
@@ -71,9 +99,11 @@ class SimpleStreamHandler:
             toolkit=toolkit,
         )
 
-        session = JSONSession(save_dir="./sessions")
+        session = JSONSession(
+            save_dir=tempfile.mkdtemp(prefix="agentscope-a2a-sessions-"),
+        )
         await session.load_session_state(
-            session_id="test-a2a-agent",
+            session_id=task_id,
             agent=agent,
         )
 
@@ -119,7 +149,7 @@ class SimpleStreamHandler:
         )
 
         await session.save_session_state(
-            session_id="test-a2a-agent",
+            session_id=task_id,
             agent=agent,
         )
 

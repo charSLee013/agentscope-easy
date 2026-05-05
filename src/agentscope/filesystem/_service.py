@@ -2,7 +2,7 @@
 """Service layer for the filesystem MVP."""
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from ._errors import AccessDeniedError, InvalidArgumentError, NotFoundError
 from ._handle import FsHandle, validate_path
@@ -94,6 +94,27 @@ class FileDomainService:
             except Exception as exc:  # noqa: BLE001
                 items.append({"path": path, "ok": False, "error": str(exc)})
         return items
+
+    def read_re(
+        self,
+        path: str,
+        pattern: str,
+        *,
+        overlap: int | None = None,
+    ) -> Sequence[str]:
+        """Read regex matches from a logical file.
+
+        Args:
+            path: Absolute logical path, for example /workspace/file or
+                /internal/file.
+            pattern: Regex pattern.
+            overlap: Optional overlap in bytes.
+
+        Returns:
+            A sequence of matching lines.
+        """
+        logical_path = validate_path(path)
+        return self._handle.read_re(logical_path, pattern, overlap=overlap)
 
     def write_file(self, path: str, content: str) -> EntryMeta:
         """Write text to a logical file following the Phase 1 policy."""

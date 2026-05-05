@@ -2,6 +2,7 @@
 """The logger for agentscope."""
 
 import logging
+import os
 
 
 _DEFAULT_FORMAT = (
@@ -10,6 +11,14 @@ _DEFAULT_FORMAT = (
 )
 
 logger = logging.getLogger("as")
+
+
+class _DirectoryCreatingFileHandler(logging.FileHandler):
+    """FileHandler that recreates its parent directory before opening."""
+
+    def _open(self):  # type: ignore[no-untyped-def]
+        os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
+        return super()._open()
 
 
 def setup_logger(
@@ -30,14 +39,17 @@ def setup_logger(
             f"Invalid logging level: {level}. Must be one of "
             f"'INFO', 'DEBUG', 'WARNING', 'ERROR', 'CRITICAL'.",
         )
-    logger.handlers.clear()
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
     logger.setLevel(level)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT))
     logger.addHandler(handler)
 
     if filepath:
-        handler = logging.FileHandler(filepath)
+        handler = _DirectoryCreatingFileHandler(filepath)
         handler.setFormatter(logging.Formatter(_DEFAULT_FORMAT))
         logger.addHandler(handler)
 

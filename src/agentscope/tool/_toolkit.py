@@ -147,7 +147,7 @@ class Toolkit(StateModule):
 
     _DEFAULT_AGENT_SKILL_TEMPLATE = """## {name}
 {description}
-Check "{dir}/SKILL.md" for how to use this skill"""
+Check "{logical_dir}/SKILL.md" for how to use this skill"""
 
     def __init__(
         self,
@@ -162,8 +162,9 @@ Check "{dir}/SKILL.md" for how to use this skill"""
                 provided, a default instruction will be used.
             agent_skill_template (`str | None`, optional):
                 The template to present one agent skill in the system prompt,
-                which should contain `{name}`, `{description}`, and `{dir}`
-                placeholders. If not provided, a default template will be used.
+                which can contain `{name}`, `{description}`, and
+                `{logical_dir}`. If not provided, a default template will be
+                used.
         """
         super().__init__()
 
@@ -224,14 +225,36 @@ Check "{dir}/SKILL.md" for how to use this skill"""
                 If the tool groups should be activated or deactivated.
         """
 
-        for group_name in group_names:
-            if group_name == "basic":
-                logger.warning(
-                    "The 'basic' tool group is always active, skipping it.",
-                )
+        if not isinstance(group_names, list) or not all(
+            isinstance(_, str) for _ in group_names
+        ):
+            raise TypeError(
+                f"The group_names must be a list of strings, "
+                f"but got {type(group_names)}.",
+            )
 
-            if group_name in self.groups:
-                self.groups[group_name].active = active
+        if not isinstance(active, bool):
+            raise TypeError(
+                f"The active must be a bool value, but got {type(active)}.",
+            )
+
+        unknown_groups = [
+            group_name
+            for group_name in group_names
+            if group_name != "basic" and group_name not in self.groups
+        ]
+        if unknown_groups:
+            raise ValueError(
+                f"Tool group(s) not found: {', '.join(unknown_groups)}.",
+            )
+
+        if "basic" in group_names:
+            raise ValueError(
+                "Cannot update the default 'basic' tool group.",
+            )
+
+        for group_name in group_names:
+            self.groups[group_name].active = active
 
     def remove_tool_groups(self, group_names: str | list[str]) -> None:
         """Remove tool functions from the toolkit by their group names.
@@ -1039,9 +1062,6 @@ Check "{dir}/SKILL.md" for how to use this skill"""
         groups, which you **MUST pay attention to and follow**. You can also
         reuse this function to check the notes of the tool groups."""
 
-        # Deactivate all tool groups first
-        self.update_tool_groups(list(self.groups.keys()), active=False)
-
         to_activate = []
         for key, value in kwargs.items():
             if not isinstance(value, bool):
@@ -1055,18 +1075,50 @@ Check "{dir}/SKILL.md" for how to use this skill"""
                     ],
                 )
 
+            if key == "basic":
+                return ToolResponse(
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=(
+                                "Invalid arguments: cannot update the "
+                                "default 'basic' tool group."
+                            ),
+                        ),
+                    ],
+                )
+
+            if key not in self.groups:
+                return ToolResponse(
+                    content=[
+                        TextBlock(
+                            type="text",
+                            text=(
+                                "Invalid arguments: unknown tool group "
+                                f"'{key}'."
+                            ),
+                        ),
+                    ],
+                )
+
             if value:
                 to_activate.append(key)
 
+        self.update_tool_groups(list(self.groups.keys()), active=False)
         self.update_tool_groups(to_activate, active=True)
 
+        active_groups = [
+            group_name
+            for group_name, group in self.groups.items()
+            if group.active
+        ]
         notes = self.get_activated_notes()
 
         text_response = ""
-        if to_activate:
+        if active_groups:
             text_response += (
                 "Now tool groups "
-                + ", ".join([f"'{_}'" for _ in to_activate])
+                + ", ".join([f"'{_}'" for _ in active_groups])
                 + " are activated."
             )
 
@@ -1077,7 +1129,9 @@ Check "{dir}/SKILL.md" for how to use this skill"""
             )
 
         if not text_response:
-            text_response = "All tool groups are now deactivated currently."
+            text_response = (
+                "All non-basic tool groups are now deactivated currently."
+            )
 
         return ToolResponse(
             content=[
@@ -1105,6 +1159,7 @@ Check "{dir}/SKILL.md" for how to use this skill"""
     def register_agent_skill(
         self,
         skill_dir: str,
+        logical_dir: str | None = None,
     ) -> None:
         """Register agent skills from a given directory. This function will
         scan the directory, read metadata from the SKILL.md file, and add
@@ -1119,7 +1174,11 @@ Check "{dir}/SKILL.md" for how to use this skill"""
 
         Args:
             skill_dir (`str`):
-                The path to the skill directory.
+                The path to the skill directory (host path for validation).
+            logical_dir (`str | None`, optional):
+                The logical path for model prompts (e.g., "/internal/...").
+                If not provided, it will be derived from skill_dir by
+                taking the last path component and prefixing with "/internal/".
         """
         import frontmatter
 
@@ -1158,16 +1217,48 @@ Check "{dir}/SKILL.md" for how to use this skill"""
                 "in the toolkit.",
             )
 
+        # Compute logical_dir if not provided
+        if logical_dir is None:
+            # Derive from skill_dir: take last path component
+            skill_name = os.path.basename(os.path.abspath(skill_dir))
+            logical_dir = f"/internal/{skill_name}"
+        else:
+            # Validate using the shared filesystem validator
+            from agentscope.filesystem import InvalidPathError, validate_path
+
+            try:
+                validated = validate_path(logical_dir)
+            except InvalidPathError as exc:
+                raise ValueError(
+                    f"logical_dir must be an absolute logical path starting "
+                    f"with '/', got: {logical_dir!r}",
+                ) from exc
+            # Enforce /internal/ domain semantic
+            if (
+                not validated.startswith("/internal/")
+                or validated == "/internal"
+            ):
+                raise ValueError(
+                    f"logical_dir must be under /internal/, "
+                    f"got: {logical_dir!r}",
+                )
+            if validated.endswith("/"):
+                raise ValueError(
+                    f"logical_dir must not have a trailing slash, "
+                    f"got: {logical_dir!r}",
+                )
+            logical_dir = validated
+
         self.skills[name] = AgentSkill(
             name=name,
             description=description,
-            dir=skill_dir,
+            logical_dir=logical_dir,
         )
 
         logger.info(
-            "Registered agent skill '%s' from directory '%s'.",
+            "Registered agent skill '%s' from logical directory '%s'.",
             name,
-            skill_dir,
+            logical_dir,
         )
 
     def remove_agent_skill(self, name: str) -> None:
@@ -1209,7 +1300,7 @@ Check "{dir}/SKILL.md" for how to use this skill"""
             self._agent_skill_template.format(
                 name=_["name"],
                 description=_["description"],
-                dir=_["dir"],
+                logical_dir=_["logical_dir"],
             )
             for _ in self.skills.values()
         ]

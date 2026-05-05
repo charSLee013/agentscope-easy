@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Evaluation module tests in agentscope."""
 import os
-import sys
 import shutil
 from typing import Generator, Callable, Any, cast
 from unittest.async_case import IsolatedAsyncioTestCase
@@ -193,17 +192,12 @@ class EvaluatorTest(IsolatedAsyncioTestCase):
         )
         # Initialize Ray with proper serialization settings
         if not ray.is_initialized():
-            # Add the current directory to Python path for Ray workers
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            if current_dir not in sys.path:
-                sys.path.insert(0, current_dir)
-
             ray.init(
                 _temp_dir=None,  # Use default temp directory
                 ignore_reinit_error=True,  # Allow re-initialization
                 runtime_env={
-                    "working_dir": current_dir,
-                    "py_modules": [__file__],  # Include this test file
+                    # The test objects pickle as ``tests.evaluation_test.*``.
+                    "py_modules": [current_dir],
                 },
             )
 

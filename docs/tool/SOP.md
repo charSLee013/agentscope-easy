@@ -20,6 +20,7 @@
 
 - 所有模型可见工具都必须通过 `Toolkit.register_tool_function()` 或 MCP 注册链进入 toolkit。
 - `ToolResponse` 是工具结果的统一承载面；tool loop 不直接约定裸字符串或裸字典。
+- `agentscope.filesystem` + `FileDomainService` 是模型可见文件能力的正式契约，提供受控的逻辑文件系统。
 - duplicate tool name 的冲突处理只允许通过 `namesake_strategy` 明确声明。
 - tool group 的启停只通过 group 状态和 `reset_equipped_tools` 协调，不在 schema 外维护第二套隐藏开关。
 - `extended_model` 只用于扩展 tool schema；若字段与原函数 schema 冲突，应直接报错。

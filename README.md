@@ -110,6 +110,7 @@ Welcome to join our community on
     - [From PyPI](#from-pypi)
     - [Browser fallback extra](#browser-fallback-extra)
     - [From source](#from-source)
+    - [Controlled filesystem path](#controlled-filesystem-path)
 - [Example](#example)
   - [Hello AgentScope!](#hello-agentscope)
   - [Voice Agent](#voice-agent)
@@ -174,6 +175,11 @@ pip install -e .
 # or with uv:
 # uv pip install -e .
 ```
+
+#### Controlled filesystem path
+
+For model-visible file access, use `agentscope.filesystem` with
+`FileDomainService`.
 
 
 ## Example
