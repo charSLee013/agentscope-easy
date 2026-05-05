@@ -73,7 +73,10 @@ async def main(user_query: str) -> None:
         logger.exception(err)
         raise
     finally:
-        await tavily_search_client.close()
+        try:
+            await tavily_search_client.close()
+        finally:
+            setup_logger("INFO")
 
 
 if __name__ == "__main__":

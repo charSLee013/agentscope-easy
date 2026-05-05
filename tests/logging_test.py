@@ -45,5 +45,5 @@ def test_file_logger_recreates_parent_directory_when_reopened() -> None:
         logger.info("after close")
 
         assert log_file.exists()
-
-    setup_logger("INFO")
+        setup_logger("INFO")
+        assert file_handler.stream is None

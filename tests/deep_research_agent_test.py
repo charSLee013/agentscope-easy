@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import logging
 import os
 import sys
 from contextlib import contextmanager
@@ -20,6 +21,7 @@ from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg, TextBlock
 from agentscope.model import ChatModelBase, ChatResponse
+from agentscope._logging import logger
 
 
 DEEP_RESEARCH_DIR = (
@@ -479,3 +481,7 @@ def test_deep_research_main_propagates_runtime_errors() -> None:
             assert False, "Expected RuntimeError was not raised"
         except RuntimeError as exc:
             assert "connect boom" in str(exc)
+
+        for handler in logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                assert not str(handler.baseFilename).startswith(tmpdir)
