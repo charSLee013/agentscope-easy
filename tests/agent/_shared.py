@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from agentscope.agent import ReActAgent
-from agentscope.filesystem import AccessDeniedError, FileDomainService, InMemoryFileSystem
+from agentscope.filesystem import (
+    AccessDeniedError,
+    FileDomainService,
+    InMemoryFileSystem,
+)
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import TextBlock, ToolUseBlock

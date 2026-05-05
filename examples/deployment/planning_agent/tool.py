@@ -146,7 +146,14 @@ async def create_worker(
         [
             {
                 "prefix": "/workspace/",
-                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "write",
+                    "delete",
+                },
             },
         ],
     )

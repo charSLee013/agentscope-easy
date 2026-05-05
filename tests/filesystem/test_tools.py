@@ -201,7 +201,7 @@ class FilesystemToolTest(IsolatedAsyncioTestCase):
         assert "line4: delta" in text
 
     def test_tool_functions_exact_surface(self) -> None:
-        """FileDomainService.tool_functions() must export exactly this surface."""
+        """tool_functions() must export exactly this surface."""
         expected = [
             "read_text_file",
             "read_multiple_files",

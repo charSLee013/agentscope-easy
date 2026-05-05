@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Regression tests for A2UI skill retrieval tools."""
+# pylint: disable=missing-class-docstring,missing-function-docstring
+# pylint: disable=unused-argument
 
 import asyncio
 import ast
@@ -8,11 +10,17 @@ import re
 import sys
 import tempfile
 import uuid
+from types import ModuleType
+from typing import Any, AsyncIterable, AsyncIterator
 from unittest.mock import patch
 
 from a2a.types import Message, MessageSendParams, TextPart
 
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.message import Msg
 from agentscope.message import ToolUseBlock
 from agentscope.tool import Toolkit, ToolResponse
@@ -27,7 +35,7 @@ from tests._a2ui_sample import (
 )
 
 
-def _load_skill_module():
+def _load_skill_module() -> ModuleType:
     """Import the A2UI skill package from the real sample path."""
     with sample_on_path():
         purge_a2ui_skill_modules()
@@ -47,7 +55,7 @@ async def _collect_tool_chunks(
     return chunks
 
 
-async def _collect_async(async_iterable):
+async def _collect_async(async_iterable: AsyncIterable[Any]) -> list[Any]:
     """Collect all items from an async iterable."""
     items = []
     async for item in async_iterable:
@@ -70,7 +78,7 @@ def test_a2ui_skill_tools_are_importable_and_return_tool_response() -> None:
 
 
 def test_skill_markdown_template_names_match_runtime_contract() -> None:
-    """The skill doc should list the exact template names accepted at runtime."""
+    """The skill doc should list exact runtime template names."""
     module = ast.parse((SKILL_DIR / "view_a2ui_examples.py").read_text())
     template_keys: list[str] = []
     for node in module.body:
@@ -105,7 +113,7 @@ def test_skill_markdown_template_names_match_runtime_contract() -> None:
 
 
 def test_view_a2ui_examples_docstring_matches_runtime_contract() -> None:
-    """The tool docstring should describe the same template names it accepts."""
+    """The tool docstring should describe accepted template names."""
     module = ast.parse((SKILL_DIR / "view_a2ui_examples.py").read_text())
     template_keys: list[str] = []
     docstring_keys: list[str] = []
@@ -132,7 +140,7 @@ def test_view_a2ui_examples_docstring_matches_runtime_contract() -> None:
 
 
 def test_a2ui_skill_package_import_does_not_mutate_sys_path() -> None:
-    """Importing the skill package should not rewrite interpreter search paths."""
+    """Importing the skill package should not rewrite sys.path."""
     baseline = list(sys.path)
     with sample_on_path():
         purge_a2ui_skill_modules()
@@ -157,7 +165,10 @@ def test_setup_server_reuses_runtime_helper_objects() -> None:
         runtime_helpers = importlib.import_module("runtime_helpers")
         setup_server = importlib.import_module("setup_a2ui_server")
 
-    assert setup_server.build_sample_toolkit is runtime_helpers.build_sample_toolkit
+    assert (
+        setup_server.build_sample_toolkit
+        is runtime_helpers.build_sample_toolkit
+    )
     assert (
         setup_server.prepare_final_a2a_message
         is runtime_helpers.prepare_final_a2a_message
@@ -165,7 +176,7 @@ def test_setup_server_reuses_runtime_helper_objects() -> None:
 
 
 def test_agent_card_skills_match_server_registration() -> None:
-    """agent_card.skills[*].id must match the tools the server actually registers.
+    """agent_card skill ids must match server-registered tools.
 
     This locks the contract: the skills the agent card advertises must be
     exactly what setup_a2ui_server registers into the Toolkit.
@@ -178,8 +189,7 @@ def test_agent_card_skills_match_server_registration() -> None:
         runtime_helpers = importlib.import_module("runtime_helpers")
         toolkit = runtime_helpers.build_sample_toolkit()
     registered_tool_ids = {
-        schema["function"]["name"]
-        for schema in toolkit.get_json_schemas()
+        schema["function"]["name"] for schema in toolkit.get_json_schemas()
     }
     assert card_skill_ids == registered_tool_ids, (
         f"agent_card.skills mismatch.\n"
@@ -215,9 +225,9 @@ def test_prepare_final_a2a_message_formats_then_post_processes() -> None:
 
     class FakeFormatter:
         def __init__(self) -> None:
-            self.calls = []
+            self.calls: list[list[Any]] = []
 
-        async def format(self, messages):
+        async def format(self, messages: list[Any]) -> str:
             self.calls.append(messages)
             return "formatted-message"
 
@@ -254,29 +264,48 @@ def test_setup_server_uses_generated_task_id_for_session_identity() -> None:
             self.save_dir = save_dir
             save_dirs.append(save_dir)
 
-        async def load_session_state(self, session_id, agent):
+        async def load_session_state(
+            self,
+            session_id: str,
+            agent: Any,
+        ) -> None:
             load_session_ids.append(session_id)
 
-        async def save_session_state(self, session_id, agent):
+        async def save_session_state(
+            self,
+            session_id: str,
+            agent: Any,
+        ) -> None:
             save_session_ids.append(session_id)
 
     class FakeFormatter:
-        async def format_a2a_message(self, name, message):
+        async def format_a2a_message(
+            self,
+            name: str,
+            message: Message,
+        ) -> Msg:
             return Msg(name, "hello", "user")
 
     class FakeAgent:
         sys_prompt = "prompt"
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def __call__(self, msg):
+        async def __call__(self, msg: Msg) -> Msg:
             return Msg("Friday", "done", "assistant")
 
-    async def fake_stream_printing_messages(*, agents, coroutine_task):
+    async def fake_stream_printing_messages(
+        *,
+        agents: list[Any],
+        coroutine_task: Any,
+    ) -> AsyncIterator[tuple[Any, bool]]:
         yield await coroutine_task, True
 
-    async def fake_prepare_final_a2a_message(formatter, final_msg):
+    async def fake_prepare_final_a2a_message(
+        formatter: Any,
+        final_msg: Any,
+    ) -> Message:
         return Message(
             messageId="final-message",
             role="agent",
@@ -294,8 +323,16 @@ def test_setup_server_uses_generated_task_id_for_session_identity() -> None:
 
     with (
         patch.object(setup_server.uuid, "uuid4", return_value=uuid_value),
-        patch.object(setup_server, "build_sample_toolkit", return_value=Toolkit()),
-        patch.object(setup_server, "DashScopeChatModel", return_value=object()),
+        patch.object(
+            setup_server,
+            "build_sample_toolkit",
+            return_value=Toolkit(),
+        ),
+        patch.object(
+            setup_server,
+            "DashScopeChatModel",
+            return_value=object(),
+        ),
         patch.object(setup_server, "ReActAgent", FakeAgent),
         patch.object(setup_server, "JSONSession", FakeSession),
         patch.object(setup_server, "A2AChatFormatter", FakeFormatter),
@@ -329,7 +366,7 @@ def test_setup_server_uses_generated_task_id_for_session_identity() -> None:
 
 
 def test_setup_server_reuses_session_directory_for_same_task_id() -> None:
-    """Two requests with one task_id must share save_dir and recover saved state."""
+    """Two requests with one task_id should recover saved state."""
     with sample_on_path(), stubbed_a2ui_extension():
         purge_a2ui_skill_modules()
         importlib.invalidate_caches()
@@ -344,29 +381,50 @@ def test_setup_server_reuses_session_directory_for_same_task_id() -> None:
             self.save_dir = save_dir
             save_dirs.append(save_dir)
 
-        async def load_session_state(self, session_id, agent):
-            loaded_states.append(persisted.get((self.save_dir, session_id), False))
+        async def load_session_state(
+            self,
+            session_id: str,
+            agent: Any,
+        ) -> None:
+            loaded_states.append(
+                persisted.get((self.save_dir, session_id), False),
+            )
 
-        async def save_session_state(self, session_id, agent):
+        async def save_session_state(
+            self,
+            session_id: str,
+            agent: Any,
+        ) -> None:
             persisted[(self.save_dir, session_id)] = True
 
     class FakeFormatter:
-        async def format_a2a_message(self, name, message):
+        async def format_a2a_message(
+            self,
+            name: str,
+            message: Message,
+        ) -> Msg:
             return Msg(name, "hello", "user")
 
     class FakeAgent:
         sys_prompt = "prompt"
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def __call__(self, msg):
+        async def __call__(self, msg: Msg) -> Msg:
             return Msg("Friday", "done", "assistant")
 
-    async def fake_stream_printing_messages(*, agents, coroutine_task):
+    async def fake_stream_printing_messages(
+        *,
+        agents: list[Any],
+        coroutine_task: Any,
+    ) -> AsyncIterator[tuple[Any, bool]]:
         yield await coroutine_task, True
 
-    async def fake_prepare_final_a2a_message(formatter, final_msg):
+    async def fake_prepare_final_a2a_message(
+        formatter: Any,
+        final_msg: Any,
+    ) -> Message:
         return Message(
             messageId="final-message",
             role="agent",
@@ -382,8 +440,16 @@ def test_setup_server_reuses_session_directory_for_same_task_id() -> None:
     )
 
     with (
-        patch.object(setup_server, "build_sample_toolkit", return_value=Toolkit()),
-        patch.object(setup_server, "DashScopeChatModel", return_value=object()),
+        patch.object(
+            setup_server,
+            "build_sample_toolkit",
+            return_value=Toolkit(),
+        ),
+        patch.object(
+            setup_server,
+            "DashScopeChatModel",
+            return_value=object(),
+        ),
         patch.object(setup_server, "ReActAgent", FakeAgent),
         patch.object(setup_server, "JSONSession", FakeSession),
         patch.object(setup_server, "A2AChatFormatter", FakeFormatter),
@@ -423,11 +489,11 @@ def test_setup_server_reuses_session_directory_for_same_task_id() -> None:
     assert loaded_states == [False, True]
 
 
-# ─── MEDIUM-2: invalid inputs must raise ValueError ───────────────────────────
+# MEDIUM-2: invalid inputs must raise ValueError
 
 
 def test_view_a2ui_schema_rejects_bad_schema_category() -> None:
-    """view_a2ui_schema with an invalid schema_category must raise ValueError."""
+    """Invalid schema_category should raise ValueError."""
     skill_module = _load_skill_module()
 
     try:
@@ -449,7 +515,7 @@ def test_view_a2ui_examples_rejects_empty_template_name() -> None:
 
 
 def test_view_a2ui_examples_rejects_unknown_template() -> None:
-    """view_a2ui_examples with an unknown template name must raise ValueError."""
+    """Unknown template_name should raise ValueError."""
     skill_module = _load_skill_module()
 
     try:
@@ -461,7 +527,8 @@ def test_view_a2ui_examples_rejects_unknown_template() -> None:
 
 
 def test_toolkit_wraps_tool_value_error_as_error_text() -> None:
-    """Toolkit must surface a registered async tool's ValueError as error text."""
+    """Toolkit must surface async tool ValueError as error text."""
+
     async def bad_tool(x: int) -> ToolResponse:
         raise ValueError("BAD")
 
@@ -479,11 +546,11 @@ def test_toolkit_wraps_tool_value_error_as_error_text() -> None:
     assert combined.startswith("Error:")
 
 
-# ─── MEDIUM-3: FileDomain main-chain regression test ──────────────────────────
+# MEDIUM-3: FileDomain main-chain regression test
 
 
 def test_read_text_file_resolves_internal_skill_path() -> None:
-    """FileDomain read_text_file should retrieve the real SKILL.md at /internal/."""
+    """read_text_file should retrieve real /internal/ SKILL.md."""
     with tempfile.TemporaryDirectory() as tmpdir:
         fs = DiskFileSystem(
             root_dir=tmpdir,
@@ -517,4 +584,6 @@ def test_read_text_file_resolves_internal_skill_path() -> None:
     text = result.content[0]["text"]
     assert "---" in text, "SKILL.md frontmatter not found"
     assert "view_a2ui_schema" in text, "view_a2ui_schema not found in SKILL.md"
-    assert "view_a2ui_examples" in text, "view_a2ui_examples not found in SKILL.md"
+    assert (
+        "view_a2ui_examples" in text
+    ), "view_a2ui_examples not found in SKILL.md"

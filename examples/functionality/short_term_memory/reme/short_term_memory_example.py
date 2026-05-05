@@ -43,7 +43,10 @@ def _source_readme_path() -> Path:
 
 
 def _seed_workspace_readme(service: FileDomainService) -> str:
-    """Write the repository README into the logical workspace and read it back."""
+    """Write the repository README into the logical workspace.
+
+    The returned text proves the seed file is readable via the service.
+    """
     readme_content = _source_readme_path().read_text(encoding="utf-8")
     service.write_file(_WORKSPACE_README_PATH, readme_content)
     return service.read_text_file(_WORKSPACE_README_PATH)
@@ -74,8 +77,12 @@ async def _read_workspace_file(
         read_lines=limit,
     )
     lines = raw.splitlines()
-    numbered = [f"line{offset + i + 1}: {line}" for i, line in enumerate(lines)]
-    return ToolResponse(content=[TextBlock(type="text", text="\n".join(numbered))])
+    numbered = [
+        f"line{offset + i + 1}: {line}" for i, line in enumerate(lines)
+    ]
+    return ToolResponse(
+        content=[TextBlock(type="text", text="\n".join(numbered))],
+    )
 
 
 async def main() -> None:
@@ -94,7 +101,15 @@ async def main() -> None:
         [
             {
                 "prefix": "/workspace/",
-                "ops": {"list", "file", "read_binary", "read_file", "read_re", "write", "delete"},
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "read_re",
+                    "write",
+                    "delete",
+                },
             },
         ],
     )
@@ -105,7 +120,8 @@ async def main() -> None:
 
         Args:
             file_path (`str`):
-                Absolute logical path (must be under /workspace/ in this example).
+                Absolute logical path. In this example it must be under
+                /workspace/.
             pattern (`str`):
                 The search pattern or regular expression to match.
             limit (`str`):
@@ -129,7 +145,8 @@ async def main() -> None:
 
         Args:
             file_path (`str`):
-                Absolute logical path (must start with /, e.g. /workspace/filename).
+                Absolute logical path. It must start with /, for example
+                /workspace/filename.
             offset (`int`):
                 The starting line number to read from (0-indexed). Use this to
                 skip to a specific position in the file.
@@ -141,9 +158,8 @@ async def main() -> None:
 
         return await _read_workspace_file(service, file_path, offset, limit)
 
-    # These two tools are provided as examples. You can replace them with your
-    # own retrieval tools, such as vector database embedding retrieval or other
-    # search solutions that fit your use case.
+    # These two tools are provided as examples. You can replace them
+    # with retrieval tools such as vector database embedding retrieval.
     toolkit.register_tool_function(grep)
     toolkit.register_tool_function(read_file)
 

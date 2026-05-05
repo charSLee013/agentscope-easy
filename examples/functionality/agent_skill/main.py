@@ -5,7 +5,11 @@ import os
 import tempfile
 
 from agentscope.agent import ReActAgent
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
@@ -23,7 +27,11 @@ async def main() -> None:
     toolkit.register_tool_function(execute_python_code)
 
     # Setup filesystem service
-    skill_dir = os.path.join(os.path.dirname(__file__), "skill", "analyzing-agentscope-library")
+    skill_dir = os.path.join(
+        os.path.dirname(__file__),
+        "skill",
+        "analyzing-agentscope-library",
+    )
     fs = DiskFileSystem(
         root_dir=tempfile.mkdtemp(prefix="agentscope-skill-fs-"),
         internal_dir=os.path.join(os.path.dirname(__file__), "skill"),
@@ -32,7 +40,14 @@ async def main() -> None:
         [
             {
                 "prefix": "/workspace/",
-                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "write",
+                    "delete",
+                },
             },
             {
                 "prefix": "/internal/",

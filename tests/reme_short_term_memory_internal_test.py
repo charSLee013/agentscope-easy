@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """Internal regression tests for the ReMe short-term memory example."""
+# pylint: disable=missing-function-docstring,unnecessary-dunder-call
+# pylint: disable=unused-argument
 from __future__ import annotations
 
 import asyncio
 import importlib.util
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import ModuleType
+from typing import Any
 
 from agentscope.message import Msg
 
@@ -20,7 +24,7 @@ REME_MEMORY_PATH = (
 )
 
 
-def _load_reme_memory_module():
+def _load_reme_memory_module() -> ModuleType:
     """Load the ReMe memory module from the example path."""
     spec = importlib.util.spec_from_file_location(
         "test_reme_short_term_memory",
@@ -38,7 +42,7 @@ class _DummyFormatter:
     def __init__(self) -> None:
         self.last_msgs = None
 
-    async def format(self, *, msgs):
+    async def format(self, *, msgs: list[Msg]) -> list[dict[str, Any]]:
         self.last_msgs = msgs
         return [
             {
@@ -58,7 +62,7 @@ class _DummyFormatter:
 class _EchoFormatter:
     """Formatter that returns one dict per stored message."""
 
-    async def format(self, *, msgs):
+    async def format(self, *, msgs: list[Msg]) -> list[dict[str, Any]]:
         return [
             {
                 "role": msg.role,
@@ -74,7 +78,7 @@ class _DummyApp:
     def __init__(self) -> None:
         self.calls = []
 
-    async def async_execute(self, **kwargs):
+    async def async_execute(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return {
             "answer": [{"role": "assistant", "content": "managed text"}],
@@ -85,7 +89,7 @@ class _DummyApp:
 class _EchoApp:
     """Async execute stub that returns one answer per input message."""
 
-    async def async_execute(self, **kwargs):
+    async def async_execute(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "answer": [
                 {"role": msg["role"], "content": msg.get("content") or ""}
@@ -98,7 +102,7 @@ class _EchoApp:
 class _CompactingApp:
     """Async execute stub that compacts multiple messages into one."""
 
-    async def async_execute(self, **kwargs):
+    async def async_execute(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "answer": [{"role": "assistant", "content": "summary"}],
             "metadata": {"write_file_dict": {}},
@@ -108,7 +112,7 @@ class _CompactingApp:
 class _ReorderingApp:
     """Async execute stub that returns messages in reverse order."""
 
-    async def async_execute(self, **kwargs):
+    async def async_execute(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "answer": list(reversed(kwargs["messages"])),
             "metadata": {"write_file_dict": {}},
@@ -116,7 +120,7 @@ class _ReorderingApp:
 
 
 def test_get_memory_preserves_tuple_storage_and_serializes_blocks() -> None:
-    """get_memory should keep tuple storage and preserve structured content text."""
+    """get_memory should keep tuple storage and block text."""
     module = _load_reme_memory_module()
     memory = object.__new__(module.ReMeShortTermMemory)
     module.InMemoryMemory.__init__(memory)

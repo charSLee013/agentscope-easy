@@ -5,7 +5,11 @@ import os
 import tempfile
 
 from agentscope.agent import ReActAgent, UserAgent
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.model import DashScopeChatModel
@@ -27,7 +31,14 @@ async def main() -> None:
         [
             {
                 "prefix": "/workspace/",
-                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+                "ops": {
+                    "list",
+                    "file",
+                    "read_binary",
+                    "read_file",
+                    "write",
+                    "delete",
+                },
             },
         ],
     )

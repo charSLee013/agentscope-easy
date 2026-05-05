@@ -105,7 +105,8 @@ class FileDomainService:
         """Read regex matches from a logical file.
 
         Args:
-            path: Absolute logical path (e.g. /workspace/file or /internal/file).
+            path: Absolute logical path, for example /workspace/file or
+                /internal/file.
             pattern: Regex pattern.
             overlap: Optional overlap in bytes.
 

@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Contract tests for the ReMe short-term memory example."""
+# pylint: disable=protected-access
 from __future__ import annotations
 
 import asyncio
 import importlib.util
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 from agentscope.filesystem import FileDomainService, InMemoryFileSystem
@@ -20,7 +22,7 @@ REME_EXAMPLE_PATH = (
 )
 
 
-def _load_reme_example_module():
+def _load_reme_example_module() -> ModuleType:
     """Load the ReMe example module without executing main()."""
     spec = importlib.util.spec_from_file_location(
         "test_reme_short_term_memory_example",
@@ -56,7 +58,7 @@ def test_reme_example_import_has_no_runtime_side_effects() -> None:
 
 
 def test_seed_workspace_readme_writes_into_logical_workspace() -> None:
-    """The sample should seed README through FileDomainService, not host-path open."""
+    """The sample should seed README through FileDomainService."""
     module = _load_reme_example_module()
     fs = InMemoryFileSystem()
     handle = fs.create_handle(

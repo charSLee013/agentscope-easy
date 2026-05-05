@@ -12,7 +12,11 @@ from fastapi.responses import FileResponse
 
 from agentscope import logger
 from agentscope.agent import RealtimeAgent
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.realtime import (
     DashScopeRealtimeModel,
     GeminiRealtimeModel,
@@ -125,7 +129,14 @@ async def single_agent_endpoint(
                         [
                             {
                                 "prefix": "/workspace/",
-                                "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+                                "ops": {
+                                    "list",
+                                    "file",
+                                    "read_binary",
+                                    "read_file",
+                                    "write",
+                                    "delete",
+                                },
                             },
                         ],
                     )

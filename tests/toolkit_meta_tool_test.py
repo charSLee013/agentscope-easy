@@ -297,7 +297,9 @@ reuse this function to check the notes of the tool groups.""",
 
         self.assertTrue(self.toolkit.groups["browser_use"].active)
 
-    async def test_reset_equipped_tools_unknown_group_keeps_state(self) -> None:
+    async def test_reset_equipped_tools_unknown_group_keeps_state(
+        self,
+    ) -> None:
         """Unknown groups should not mutate active group state."""
         self.toolkit.register_tool_function(
             self.toolkit.reset_equipped_tools,

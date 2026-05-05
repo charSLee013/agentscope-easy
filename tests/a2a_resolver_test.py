@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """The agent card resolver tests for A2A agents."""
+# pylint: disable=missing-class-docstring,missing-function-docstring
+# pylint: disable=unused-argument
 import json
 import os
 import sys
@@ -7,6 +9,7 @@ import tempfile
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, AsyncIterable, AsyncIterator, Generator
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
@@ -22,7 +25,7 @@ A2A_SAMPLE_DIR = (
 
 
 @contextmanager
-def a2a_sample_on_path():
+def a2a_sample_on_path() -> Generator[None, None, None]:
     """Temporarily add the A2A sample directory to sys.path."""
     sys.path.insert(0, str(A2A_SAMPLE_DIR))
     try:
@@ -31,7 +34,7 @@ def a2a_sample_on_path():
         sys.path.remove(str(A2A_SAMPLE_DIR))
 
 
-def load_sample_agent_card():
+def load_sample_agent_card() -> Any:
     """Load the real A2A sample agent card."""
     sys.modules.pop("agent_card", None)
     with a2a_sample_on_path():
@@ -40,7 +43,7 @@ def load_sample_agent_card():
     return agent_card
 
 
-async def _collect_async(async_iterable):
+async def _collect_async(async_iterable: AsyncIterable[Any]) -> list[Any]:
     """Collect all items from an async iterable."""
     items = []
     async for item in async_iterable:
@@ -83,8 +86,7 @@ class A2AAgentCardResolverTest(IsolatedAsyncioTestCase):
         toolkit = setup_a2a_server.build_a2a_toolkit()
         card_skill_ids = {skill.id for skill in self.agent_card.skills}
         registered_tool_ids = {
-            schema["function"]["name"]
-            for schema in toolkit.get_json_schemas()
+            schema["function"]["name"] for schema in toolkit.get_json_schemas()
         }
 
         self.assertEqual(card_skill_ids, registered_tool_ids)
@@ -104,17 +106,29 @@ class A2AAgentCardResolverTest(IsolatedAsyncioTestCase):
                 self.save_dir = save_dir
                 save_dirs.append(save_dir)
 
-            async def load_session_state(self, session_id, agent):
+            async def load_session_state(
+                self,
+                session_id: str,
+                agent: Any,
+            ) -> None:
                 load_session_ids.append(session_id)
 
-            async def save_session_state(self, session_id, agent):
+            async def save_session_state(
+                self,
+                session_id: str,
+                agent: Any,
+            ) -> None:
                 save_session_ids.append(session_id)
 
         class FakeFormatter:
-            async def format_a2a_message(self, name, message):
+            async def format_a2a_message(
+                self,
+                name: str,
+                message: Message,
+            ) -> Msg:
                 return Msg(name, "hello", "user")
 
-            async def format(self, messages):
+            async def format(self, messages: list[Msg]) -> Message:
                 return Message(
                     messageId="formatted",
                     role="agent",
@@ -122,13 +136,17 @@ class A2AAgentCardResolverTest(IsolatedAsyncioTestCase):
                 )
 
         class FakeAgent:
-            def __init__(self, *args, **kwargs) -> None:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
                 pass
 
-            async def __call__(self, msg):
+            async def __call__(self, msg: Msg) -> Msg:
                 return Msg("Friday", "done", "assistant")
 
-        async def fake_stream_printing_messages(*, agents, coroutine_task):
+        async def fake_stream_printing_messages(
+            *,
+            agents: list[Any],
+            coroutine_task: Any,
+        ) -> AsyncIterator[tuple[Any, bool]]:
             yield await coroutine_task, True
 
         params = MessageSendParams(
@@ -141,7 +159,11 @@ class A2AAgentCardResolverTest(IsolatedAsyncioTestCase):
         uuid_value = uuid.UUID("12345678123456781234567812345678")
 
         with (
-            patch.object(setup_a2a_server.uuid, "uuid4", return_value=uuid_value),
+            patch.object(
+                setup_a2a_server.uuid,
+                "uuid4",
+                return_value=uuid_value,
+            ),
             patch.object(setup_a2a_server, "build_a2a_toolkit"),
             patch.object(setup_a2a_server, "DashScopeChatModel"),
             patch.object(setup_a2a_server, "ReActAgent", FakeAgent),
@@ -159,7 +181,10 @@ class A2AAgentCardResolverTest(IsolatedAsyncioTestCase):
                 ),
             )
 
-        self.assertEqual([event.task_id for event in events], [uuid_value.hex] * 3)
+        self.assertEqual(
+            [event.task_id for event in events],
+            [uuid_value.hex] * 3,
+        )
         self.assertEqual(load_session_ids, [uuid_value.hex])
         self.assertEqual(save_session_ids, [uuid_value.hex])
         self.assertEqual(len(save_dirs), 1)

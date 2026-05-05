@@ -134,7 +134,9 @@ class SimpleStreamHandler:
         """
 
         task_id = task_id or params.message.task_id or uuid.uuid4().hex
-        context_id = context_id or params.message.context_id or "default-context"
+        context_id = (
+            context_id or params.message.context_id or "default-context"
+        )
         # ============ Agent Logic ============
         toolkit = build_sample_toolkit()
 

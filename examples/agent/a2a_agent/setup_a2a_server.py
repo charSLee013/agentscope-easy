@@ -17,7 +17,11 @@ from a2a.types import (
 from a2a.server.apps import A2AStarletteApplication
 
 from agentscope.agent import ReActAgent
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
 from agentscope.formatter import DashScopeChatFormatter, A2AChatFormatter
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages

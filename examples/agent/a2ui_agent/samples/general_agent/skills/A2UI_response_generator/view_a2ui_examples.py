@@ -45,7 +45,7 @@ TEMPLATE_MAP = {
 }
 
 
-async def view_a2ui_examples(template_name: str):
+async def view_a2ui_examples(template_name: str) -> ToolResponse:
     """View A2UI UI template examples for generating UI responses.
 
     Args:
@@ -78,10 +78,17 @@ async def view_a2ui_examples(template_name: str):
         )
 
     example = TEMPLATE_MAP[template_name]
-    return ToolResponse(content=[TextBlock(type="text", text=f"""## A2UI Template: {template_name}
+    return ToolResponse(
+        content=[
+            TextBlock(
+                type="text",
+                text=f"""## A2UI Template: {template_name}
 
 {example}
 
 ---
 Adapt this template to your specific data and styling requirements.
-""")])
+""",
+            ),
+        ],
+    )

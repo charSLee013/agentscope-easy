@@ -31,7 +31,12 @@ def _attach_existing_marks(
 ) -> list[tuple[Msg, list[str]]]:
     """Preserve marks by message order after ReMe rewrites message objects."""
     return [
-        (msg, list(source_content[index][1]) if index < len(source_content) else [])
+        (
+            msg,
+            list(source_content[index][1])
+            if index < len(source_content)
+            else [],
+        )
         for index, msg in enumerate(messages)
     ]
 
@@ -284,7 +289,7 @@ class ReMeShortTermMemory(InMemoryMemory):
             contains paths and content for all externally stored
             messages.
         """
-        source_content = list(self.content)
+        source_content = list(getattr(self, "content"))
         managed_msgs = await super().get_memory(
             mark=mark,
             exclude_mark=exclude_mark,
@@ -295,8 +300,8 @@ class ReMeShortTermMemory(InMemoryMemory):
             msgs=managed_msgs,
         )
         for message in messages:
-            if isinstance(message.get("content"), list):
-                msg_content = message.get("content")
+            msg_content = message.get("content")
+            if isinstance(msg_content, list):
                 message["content"] = _stringify_content_blocks(msg_content)
 
         # Execute ReMe's working memory offload pipeline
@@ -344,7 +349,9 @@ class ReMeShortTermMemory(InMemoryMemory):
                 managed_msgs,
             )
 
-        has_prepended_summary = bool(prepend_summary and self._compressed_summary)
+        has_prepended_summary = bool(
+            prepend_summary and self._compressed_summary,
+        )
         if _can_persist_managed_storage(
             mark,
             exclude_mark,

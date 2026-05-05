@@ -13,7 +13,9 @@ from agentscope.tool import ToolResponse
 from .schema.base_schema import A2UI_SCHEMA
 
 
-async def view_a2ui_schema(schema_category: str = "BASE_SCHEMA"):
+async def view_a2ui_schema(
+    schema_category: str = "BASE_SCHEMA",
+) -> ToolResponse:
     """View the complete A2UI schema for generating UI responses.
 
     This tool returns the complete A2UI JSON schema that defines all

@@ -50,7 +50,10 @@ from agentscope.message import (
 _DEEP_RESEARCH_AGENT_DEFAULT_SYS_PROMPT = "You're a helpful assistant."
 
 
-def _append_expected_output(current_msg: Msg, expected_output: str | None) -> None:
+def _append_expected_output(
+    current_msg: Msg,
+    expected_output: str | None,
+) -> None:
     """Append expected-output text without corrupting structured content."""
     if isinstance(current_msg.content, str):
         current_msg.content += f"\nExpected Output:\n{expected_output}"
@@ -58,7 +61,10 @@ def _append_expected_output(current_msg: Msg, expected_output: str | None) -> No
     if isinstance(current_msg.content, list):
         current_msg.content = [
             *current_msg.content,
-            TextBlock(type="text", text=f"Expected Output:\n{expected_output}"),
+            TextBlock(
+                type="text",
+                text=f"Expected Output:\n{expected_output}",
+            ),
         ]
         return
     raise TypeError(
@@ -197,7 +203,14 @@ class DeepResearchAgent(ReActAgent):
             [
                 {
                     "prefix": "/workspace/",
-                    "ops": {"list", "file", "read_binary", "read_file", "write", "delete"},
+                    "ops": {
+                        "list",
+                        "file",
+                        "read_binary",
+                        "read_file",
+                        "write",
+                        "delete",
+                    },
                 },
             ],
         )
@@ -736,7 +749,8 @@ class DeepResearchAgent(ReActAgent):
                 is_sufficient = follow_up_response.get("is_sufficient")
                 if not isinstance(is_sufficient, bool):
                     raise ValueError(
-                        "Follow-up judge output missing boolean is_sufficient.",
+                        "Follow-up judge output missing boolean "
+                        "is_sufficient.",
                     )
 
                 if not is_sufficient:
@@ -958,9 +972,9 @@ class DeepResearchAgent(ReActAgent):
                     func_name=self.read_file_function,
                     params=params,
                 )
-                read_draft_text = read_draft_tool_res_msg.content[0]["output"][0][
-                    "text"
-                ]
+                read_draft_text = read_draft_tool_res_msg.content[0]["output"][
+                    0
+                ]["text"]
                 if read_draft_text.startswith("Error:"):
                     raise RuntimeError(
                         "Failed to read draft report at "
@@ -997,7 +1011,9 @@ class DeepResearchAgent(ReActAgent):
         logger.info("Final report generated.")
 
         # Write the final report into a file
-        logical_path = f"/workspace/{self.report_path_based}_detailed_report.md"
+        logical_path = (
+            f"/workspace/{self.report_path_based}_detailed_report.md"
+        )
 
         params = {
             "path": logical_path,

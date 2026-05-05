@@ -7,14 +7,19 @@ from pathlib import Path
 
 from a2a.types import Message
 
-from agentscope.filesystem import DiskFileSystem, FileDomainService, read_text_file
-from agentscope.formatter import A2AChatFormatter
-from agentscope.message import Msg
-from agentscope.tool import Toolkit
 from skills.A2UI_response_generator import (
     view_a2ui_examples,
     view_a2ui_schema,
 )
+
+from agentscope.filesystem import (
+    DiskFileSystem,
+    FileDomainService,
+    read_text_file,
+)
+from agentscope.formatter import A2AChatFormatter
+from agentscope.message import Msg
+from agentscope.tool import Toolkit
 
 
 _SAMPLE_DIR = Path(__file__).resolve().parent

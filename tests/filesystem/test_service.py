@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from agentscope.filesystem import AccessDeniedError, FileDomainService, InMemoryFileSystem
+from agentscope.filesystem import (
+    AccessDeniedError,
+    FileDomainService,
+    InMemoryFileSystem,
+)
 
 
 ALL_OPS = {
@@ -85,7 +89,10 @@ def test_service_read_re_accepts_absolute_path() -> None:
 
     svc = _build_service()
     # Happy path: absolute path works
-    svc.write_file("/workspace/logs/app.log", "ERROR: fail\nINFO: ok\nWARN: retry")
+    svc.write_file(
+        "/workspace/logs/app.log",
+        "ERROR: fail\nINFO: ok\nWARN: retry",
+    )
     matches = svc.read_re("/workspace/logs/app.log", "ERROR.*")
     assert "ERROR: fail" in matches
 

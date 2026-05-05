@@ -147,7 +147,9 @@ class ExtendedModelReusingBaseModel(BaseModel):
     extra_field: str = Field(description="Extra field")
 
 
-class ToolkitBasicTest(IsolatedAsyncioTestCase):
+class ToolkitBasicTest(  # pylint: disable=too-many-public-methods
+    IsolatedAsyncioTestCase,
+):
     """Basic unittests for the toolkit module."""
 
     async def asyncSetUp(self) -> None:

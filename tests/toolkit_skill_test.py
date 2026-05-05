@@ -64,7 +64,7 @@ class RegisterAgentSkillLogicalDirTest(TestCase):
             self.assertNotIn(tmpdir, prompt)
 
     def test_custom_template_uses_logical_dir_placeholder(self) -> None:
-        """Custom templates should use {logical_dir} without host-path leaks."""
+        """Custom templates should use {logical_dir}."""
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_path = Path(tmpdir) / "my-skill"
             _write_skill_md(skill_path)

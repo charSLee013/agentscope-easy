@@ -1108,7 +1108,9 @@ Check "{logical_dir}/SKILL.md" for how to use this skill"""
         self.update_tool_groups(to_activate, active=True)
 
         active_groups = [
-            group_name for group_name, group in self.groups.items() if group.active
+            group_name
+            for group_name, group in self.groups.items()
+            if group.active
         ]
         notes = self.get_activated_notes()
 
@@ -1223,22 +1225,27 @@ Check "{logical_dir}/SKILL.md" for how to use this skill"""
         else:
             # Validate using the shared filesystem validator
             from agentscope.filesystem import InvalidPathError, validate_path
+
             try:
                 validated = validate_path(logical_dir)
-            except InvalidPathError:
+            except InvalidPathError as exc:
                 raise ValueError(
                     f"logical_dir must be an absolute logical path starting "
-                    f"with '/', got: {logical_dir!r}"
-                )
+                    f"with '/', got: {logical_dir!r}",
+                ) from exc
             # Enforce /internal/ domain semantic
-            if not validated.startswith("/internal/") or validated == "/internal":
+            if (
+                not validated.startswith("/internal/")
+                or validated == "/internal"
+            ):
                 raise ValueError(
-                    f"logical_dir must be under /internal/, got: {logical_dir!r}"
+                    f"logical_dir must be under /internal/, "
+                    f"got: {logical_dir!r}",
                 )
             if validated.endswith("/"):
                 raise ValueError(
                     f"logical_dir must not have a trailing slash, "
-                    f"got: {logical_dir!r}"
+                    f"got: {logical_dir!r}",
                 )
             logical_dir = validated
 

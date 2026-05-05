@@ -22,4 +22,4 @@ def test_examples_do_not_use_cwd_default_disk_filesystem() -> None:
             if not any(keyword.arg == "root_dir" for keyword in node.keywords):
                 offenders.append(str(path.relative_to(repo_root)))
 
-    assert offenders == []
+    assert not offenders

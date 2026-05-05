@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Regression tests for deep research report path generation."""
+# pylint: disable=missing-class-docstring,missing-function-docstring
+# pylint: disable=protected-access,unused-argument
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +11,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterator
+from types import ModuleType
+from typing import Any, Iterator
 from unittest.mock import AsyncMock, patch
 
 from agentscope.filesystem import validate_path
@@ -37,7 +40,7 @@ def deep_research_on_path() -> Iterator[None]:
         sys.path.remove(str(DEEP_RESEARCH_DIR))
 
 
-def _load_deep_research_module():
+def _load_deep_research_module() -> ModuleType:
     """Import the deep research example module from its real sample path."""
     with deep_research_on_path():
         importlib.invalidate_caches()
@@ -62,13 +65,17 @@ class _DummyModel(ChatModelBase):
     def __init__(self) -> None:
         super().__init__("deep-research-test-model", stream=False)
 
-    async def __call__(self, _messages, **kwargs) -> ChatResponse:
+    async def __call__(
+        self,
+        _messages: list[Msg],
+        **kwargs: Any,
+    ) -> ChatResponse:
         return ChatResponse(
             content=[TextBlock(type="text", text="ok")],
         )
 
 
-def _build_agent(module, tmpdir: str):
+def _build_agent(module: ModuleType, tmpdir: str) -> Any:
     """Construct a deep research agent with lightweight test doubles."""
     return module.DeepResearchAgent(
         name="researcher",
@@ -118,7 +125,7 @@ def test_reply_appends_expected_output_to_structured_user_content() -> None:
     with TemporaryDirectory() as tmpdir:
         agent = _build_agent(module, tmpdir)
 
-    async def fake_decompose():
+    async def fake_decompose() -> None:
         agent.current_subtask[-1].knowledge_gaps = "gap"
         agent.current_subtask[-1].working_plan = "plan"
 
@@ -162,7 +169,10 @@ def test_summarize_intermediate_results_writes_workspace_report() -> None:
     agent.get_model_output = AsyncMock(return_value=[{"text": "draft report"}])
     calls = []
 
-    async def fake_call_specific_tool(func_name, params):
+    async def fake_call_specific_tool(
+        func_name: str,
+        params: dict[str, Any],
+    ) -> tuple[None, None]:
         calls.append((func_name, params))
         return None, None
 
@@ -185,7 +195,7 @@ def test_summarize_intermediate_results_writes_workspace_report() -> None:
 
 
 def test_generate_deepresearch_report_reads_existing_drafts_only() -> None:
-    """Final report generation must read only existing drafts, then write once."""
+    """Final report generation reads drafts, then writes once."""
     module = _load_deep_research_module()
     with TemporaryDirectory() as tmpdir:
         agent = _build_agent(module, tmpdir)
@@ -201,7 +211,10 @@ def test_generate_deepresearch_report_reads_existing_drafts_only() -> None:
     agent.report_index = 2
     calls = []
 
-    async def fake_call_specific_tool(func_name, params):
+    async def fake_call_specific_tool(
+        func_name: str,
+        params: dict[str, Any],
+    ) -> tuple[None, Msg | None]:
         calls.append((func_name, params))
         if func_name == agent.read_file_function:
             return None, Msg(
@@ -236,7 +249,9 @@ def test_generate_deepresearch_report_reads_existing_drafts_only() -> None:
         agent._generate_deepresearch_report("checklist-body"),
     )
 
-    read_calls = [call for call in calls if call[0] == agent.read_file_function]
+    read_calls = [
+        call for call in calls if call[0] == agent.read_file_function
+    ]
     write_calls = [
         call for call in calls if call[0] == agent.write_file_function
     ]
@@ -250,7 +265,10 @@ def test_generate_deepresearch_report_reads_existing_drafts_only() -> None:
     assert write_calls[0][1]["path"] == (
         f"/workspace/{agent.report_path_based}_detailed_report.md"
     )
-    assert logical_path == f"/workspace/{agent.report_path_based}_detailed_report.md"
+    assert (
+        logical_path
+        == f"/workspace/{agent.report_path_based}_detailed_report.md"
+    )
 
     msgs = agent.get_model_output.await_args.kwargs["msgs"]
     assert "original task" in msgs[0].content
@@ -258,7 +276,7 @@ def test_generate_deepresearch_report_reads_existing_drafts_only() -> None:
 
 
 def test_generate_deepresearch_report_fails_fast_on_read_errors() -> None:
-    """Draft read errors must stop report generation instead of being treated as text."""
+    """Draft read errors must stop report generation."""
     module = _load_deep_research_module()
     with TemporaryDirectory() as tmpdir:
         agent = _build_agent(module, tmpdir)
@@ -273,7 +291,10 @@ def test_generate_deepresearch_report_fails_fast_on_read_errors() -> None:
     ]
     agent.report_index = 2
 
-    async def fake_call_specific_tool(func_name, params):
+    async def fake_call_specific_tool(
+        func_name: str,
+        params: dict[str, Any],
+    ) -> tuple[None, Msg]:
         if func_name == agent.read_file_function:
             return None, Msg(
                 "system",
@@ -316,7 +337,7 @@ def test_generate_deepresearch_report_fails_fast_on_read_errors() -> None:
 
 
 def test_follow_up_does_not_swallow_model_errors() -> None:
-    """Expansion and judge errors must surface instead of pretending enough info."""
+    """Expansion and judge errors must surface."""
     module = _load_deep_research_module()
     with TemporaryDirectory() as tmpdir:
         agent = _build_agent(module, tmpdir)
@@ -362,7 +383,7 @@ def test_decompose_does_not_swallow_model_errors() -> None:
 
 
 def test_reflect_failure_does_not_swallow_model_errors() -> None:
-    """Reflection failures must surface instead of pretending retry is enough."""
+    """Reflection failures must surface."""
     module = _load_deep_research_module()
     with TemporaryDirectory() as tmpdir:
         agent = _build_agent(module, tmpdir)
@@ -432,7 +453,7 @@ def test_deep_research_main_propagates_runtime_errors() -> None:
         spec.loader.exec_module(module)
 
     class FailingClient:
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
         async def connect(self) -> None:
@@ -448,7 +469,11 @@ def test_deep_research_main_propagates_runtime_errors() -> None:
         module.tempfile,
         "mkdtemp",
         side_effect=AssertionError("mkdtemp should not run"),
-    ), patch.object(module, "StdIOStatefulClient", FailingClient):
+    ), patch.object(
+        module,
+        "StdIOStatefulClient",
+        FailingClient,
+    ):
         try:
             asyncio.run(module.main("query"))
             assert False, "Expected RuntimeError was not raised"
